@@ -78,10 +78,10 @@ struct AccountCard: View {
                     .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
                 Text(account.name).font(.subheadline.weight(.semibold))
                 Spacer()
-                if let remaining = state?.snapshot?.remainingPercent {
-                    Text("\(Int(remaining.rounded()))% left")
+                if let used = state?.snapshot?.maxUsedPercent {
+                    Text("\(Int(used.rounded()))% used")
                         .font(.subheadline.weight(.semibold)).monospacedDigit()
-                        .foregroundStyle(color(forRemaining: remaining))
+                        .foregroundStyle(color(forUsed: used))
                 }
             }
 
@@ -119,7 +119,7 @@ struct WindowRow: View {
             HStack {
                 Text(window.label).font(.caption)
                 Spacer()
-                Text("\(Int(window.remainingPercent.rounded()))% left")
+                Text("\(Int(window.displayUsedPercent.rounded()))% used")
                     .font(.caption.weight(.medium)).monospacedDigit()
                 if let reset = window.resetsAt {
                     Text(resetText(reset))
@@ -131,8 +131,8 @@ struct WindowRow: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(.quaternary)
                     Capsule()
-                        .fill(color(forRemaining: window.remainingPercent))
-                        .frame(width: proxy.size.width * window.remainingPercent / 100)
+                        .fill(color(forUsed: window.displayUsedPercent))
+                        .frame(width: proxy.size.width * window.displayUsedPercent / 100)
                 }
             }
             .frame(height: 5)
@@ -176,10 +176,10 @@ struct Footer: View {
     }
 }
 
-func color(forRemaining remaining: Double) -> Color {
-    switch remaining {
-    case ..<10: .red
-    case ..<25: .orange
+func color(forUsed used: Double) -> Color {
+    switch used {
+    case 90...: .red
+    case 75...: .orange
     default: .green
     }
 }

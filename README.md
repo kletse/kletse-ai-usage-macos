@@ -1,10 +1,10 @@
 # AI Usage
 
-A macOS menu bar app that shows how much of your AI subscription limits is left, for several
+A macOS menu bar app that shows how much of your AI subscription limits you have used, for several
 Claude Code and Codex logins at once.
 
-The menu bar shows one number per account: the remaining percentage of its tightest limit, e.g.
-`CC 4% CCK 96% CO 50% COK 99%`. The dropdown lists every limit (session / 5-hour, weekly,
+The menu bar shows one number per account: the used percentage of its tightest limit, e.g.
+`CC 96% CCK 4% CO 50% COK 1%`. The dropdown lists every limit (session / 5-hour, weekly,
 per-model weekly, Enterprise monthly spend) with the time until it resets.
 
 ## Build and run

@@ -18,9 +18,9 @@ func dump() async {
                 if let stale = snapshot.staleReason { print("  stale: \(stale)") }
                 for window in snapshot.windows {
                     let reset = window.resetsAt.map { "resets \($0)\(window.resetIsEstimate ? " (est.)" : "")" } ?? ""
-                    print("  \(window.label): \(Int(window.remainingPercent.rounded()))% left \(window.detail ?? "") \(reset)")
+                    print("  \(window.label): \(Int(window.displayUsedPercent.rounded()))% used \(window.detail ?? "") \(reset)")
                 }
-                print("  => \(snapshot.remainingPercent.map { "\(Int($0.rounded()))% left" } ?? "no limits")")
+                print("  => \(snapshot.maxUsedPercent.map { "\(Int($0.rounded()))% used" } ?? "no limits")")
             } catch {
                 print("  error: \(error)")
             }

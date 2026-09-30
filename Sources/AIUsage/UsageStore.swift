@@ -29,13 +29,13 @@ final class UsageStore {
         }
     }
 
-    /// Compact text for the menu bar, e.g. "CC 4% CCK 96% CO 50% COK 99%".
+    /// Compact text for the menu bar, e.g. "CC 96% CCK 4% CO 50% COK 1%" (percentage used).
     var menuBarText: String {
         if configError != nil { return "AI ⚠" }
         if accounts.isEmpty { return "AI …" }
         return accounts.map { account in
-            guard let remaining = states[account.id]?.snapshot?.remainingPercent else { return "\(account.short) –" }
-            return "\(account.short) \(Int(remaining.rounded()))%"
+            guard let used = states[account.id]?.snapshot?.maxUsedPercent else { return "\(account.short) –" }
+            return "\(account.short) \(Int(used.rounded()))%"
         }.joined(separator: " ")
     }
 

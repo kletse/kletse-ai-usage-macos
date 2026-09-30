@@ -11,7 +11,8 @@ struct UsageWindow: Sendable, Identifiable, Hashable {
     var resetIsEstimate = false
 
     var id: String { label }
-    var remainingPercent: Double { max(0, min(100, 100 - usedPercent)) }
+    /// Used percentage clamped to 0...100 for display.
+    var displayUsedPercent: Double { max(0, min(100, usedPercent)) }
 }
 
 struct UsageSnapshot: Sendable {
@@ -24,8 +25,8 @@ struct UsageSnapshot: Sendable {
     /// Set when this came from a local cache instead of a live request.
     var staleReason: String?
 
-    /// The binding limit: the lowest remaining percentage over all windows.
-    var remainingPercent: Double? { windows.map(\.remainingPercent).min() }
+    /// The binding limit: the highest used percentage over all windows.
+    var maxUsedPercent: Double? { windows.map(\.displayUsedPercent).max() }
 }
 
 struct FetchError: Error, CustomStringConvertible {
