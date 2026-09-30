@@ -4,3 +4,21 @@ build/
 *.xcodeproj
 xcuserdata/
 .DS_Store
+
+# Local credentials and account configuration
+.env
+.env.*
+!.env.example
+!.env.sample
+auth.json
+.credentials.json
+.claude.json
+accounts.json
+.claude/
+.claude-*/
+.codex/
+.codex-*/
+*.pem
+*.key
+*.p12
+*.pfx

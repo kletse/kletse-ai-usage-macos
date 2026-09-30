@@ -7,49 +7,33 @@ func fetchSnapshot(for account: AccountConfig) async throws -> UsageSnapshot {
     }
 }
 
-/// `AIUsage --dump` prints what the app would show, for debugging. It never prints tokens.
-func dump() async {
-    do {
-        for account in try AppConfig.load() {
-            print("== \(account.name)\(account.short.map { " (\($0))" } ?? "")")
-            do {
-                let snapshot = try await fetchSnapshot(for: account)
-                print("  \(snapshot.identity ?? "?") · \(snapshot.plan ?? "?") · fetched \(snapshot.fetchedAt)")
-                if let stale = snapshot.staleReason { print("  stale: \(stale)") }
-                for window in snapshot.windows {
-                    let reset = window.resetsAt.map { "resets \($0)\(window.resetIsEstimate ? " (est.)" : "")" } ?? ""
-                    print("  \(window.label): \(Int(window.displayUsedPercent.rounded()))% used \(window.detail ?? "") \(reset)")
-                }
-                print("  => \(snapshot.maxUsedPercent.map { "\(Int($0.rounded()))% used" } ?? "no limits")")
-            } catch {
-                print("  error: \(error)")
+// Diagnostic commands must never load account configuration or fetch live data.
+// Reject invalid arguments before launching the app, which does access real accounts.
+let arguments = Array(CommandLine.arguments.dropFirst())
+if !arguments.isEmpty {
+    let flags = arguments.filter { $0 != "--sample" && $0 != "--dark" }
+    if flags == ["--dump"] {
+        DebugRender.dump()
+    } else if flags.count == 2,
+              ["--render-panel", "--render-menubar"].contains(flags[0]),
+              !flags[1].hasPrefix("--") {
+        do {
+            if flags[0] == "--render-panel" {
+                _ = NSApplication.shared
+                try DebugRender.panel(to: flags[1], dark: arguments.contains("--dark"))
+            } else {
+                try DebugRender.menuBar(to: flags[1], dark: arguments.contains("--dark"))
             }
+        } catch {
+            // Error descriptions can contain private filesystem paths.
+            print("Could not write sample image.")
+            exit(1)
         }
-    } catch {
-        print("config error: \(error)")
-    }
-}
-
-if let index = CommandLine.arguments.firstIndex(of: "--render-menubar"), index + 1 < CommandLine.arguments.count {
-    try DebugRender.menuBar(to: CommandLine.arguments[index + 1], dark: CommandLine.arguments.contains("--dark"))
-    exit(0)
-}
-
-if let index = CommandLine.arguments.firstIndex(of: "--render-panel"), index + 1 < CommandLine.arguments.count {
-    _ = NSApplication.shared
-    let store: UsageStore
-    if CommandLine.arguments.contains("--sample") {
-        store = DebugRender.sampleStore()
     } else {
-        store = UsageStore()
-        await store.refresh()
+        print("Usage: AIUsage [--dump | --render-panel FILE | --render-menubar FILE] [--dark] [--sample]")
+        print("Diagnostic commands always use sample data.")
+        exit(2)
     }
-    try DebugRender.panel(store, to: CommandLine.arguments[index + 1], dark: CommandLine.arguments.contains("--dark"))
-    exit(0)
-}
-
-if CommandLine.arguments.contains("--dump") {
-    await dump()
     exit(0)
 }
 

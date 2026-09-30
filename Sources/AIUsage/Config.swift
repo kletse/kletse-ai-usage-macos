@@ -11,7 +11,7 @@ struct AccountConfig: Codable, Sendable, Identifiable, Hashable {
     var name: String
     /// Accounts with the same group sit together; a dot separates groups in the menu bar.
     var group: String?
-    /// Optional short label, e.g. "CC". Only used by `--dump`.
+    /// Optional legacy short label, retained for config compatibility.
     var short: String?
     var provider: Provider
     /// Claude: the `CLAUDE_CONFIG_DIR` (use "~/.claude" for the default login).
@@ -26,7 +26,7 @@ struct AccountConfig: Codable, Sendable, Identifiable, Hashable {
 }
 
 enum AppConfig {
-    /// `AI_USAGE_CONFIG` overrides the location, e.g. for testing with `--dump`.
+    /// `AI_USAGE_CONFIG` overrides the location, for the live app; diagnostic commands never load it.
     static let path = ProcessInfo.processInfo.environment["AI_USAGE_CONFIG"].map(expandTilde)
         ?? expandTilde("~/.config/ai-usage/accounts.json")
     static var directory: String { (path as NSString).deletingLastPathComponent }

@@ -5,7 +5,7 @@ import SwiftUI
 /// README screenshots:
 ///   AIUsage --render-menubar out.png [--dark]
 ///   AIUsage --render-panel out.png [--sample] [--dark]
-/// `--sample` uses made-up accounts instead of your real ones.
+/// All diagnostic output uses made-up accounts. `--sample` is accepted for compatibility.
 @MainActor
 enum DebugRender {
     static func sampleStore() -> UsageStore {
@@ -35,6 +35,20 @@ enum DebugRender {
         ])
     }
 
+    /// Prints only synthetic data; no account config, credentials, or providers are read.
+    static func dump() {
+        let store = sampleStore()
+        print("Sample data only")
+        for account in store.accounts {
+            guard let snapshot = store.states[account.id]?.snapshot else { continue }
+            print("== \(account.name)")
+            print("  \(snapshot.identity ?? "?") · \(snapshot.plan ?? "?")")
+            for window in snapshot.windows {
+                print("  \(window.label): \(Int(window.displayUsedPercent.rounded()))% used \(window.detail ?? "")")
+            }
+        }
+    }
+
     /// Writes the menu bar item at 4x, using the sample accounts.
     static func menuBar(to path: String, dark: Bool) throws {
         let image = MenuBarImage.render(sampleStore().menuBarSegments)
@@ -48,8 +62,8 @@ enum DebugRender {
         }
     }
 
-    static func panel(_ store: UsageStore, to path: String, dark: Bool) throws {
-        let content = UsagePanel(store: store)
+    static func panel(to path: String, dark: Bool) throws {
+        let content = UsagePanel(store: sampleStore())
             .background(dark ? Color(white: 0.16) : Color(white: 0.93))
             .environment(\.colorScheme, dark ? .dark : .light)
         let renderer = ImageRenderer(content: content)

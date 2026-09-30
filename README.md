@@ -65,7 +65,7 @@ changes are picked up on the next refresh (every 5 minutes, or click ↻).
 | `dir` | That login's `CLAUDE_CONFIG_DIR` or `CODEX_HOME`. Use `~/.claude` / `~/.codex` for the default login. |
 | `group` | Optional. Accounts in a group are shown together under a header, with a dot between groups in the menu bar. |
 | `keychainService` | Optional, Claude only. Overrides the keychain item name (see below). |
-| `short` | Optional label, only used by `--dump`. |
+| `short` | Optional legacy label; reserved for compatibility. |
 
 The order of the list is the order in the menu bar and the dropdown. For example, with shell
 aliases like these you would add `~/.claude-work` and `~/.codex-work` as above:
@@ -115,14 +115,19 @@ time, which may break the app until it's updated.
 
 ```sh
 swift build
-swift run AIUsage --dump                                   # print your accounts' usage as text
-swift run AIUsage --render-panel panel.png                 # render the dropdown with your data
-swift run AIUsage --render-panel panel.png --sample --dark # …or with made-up sample accounts
-swift run AIUsage --render-menubar menubar.png --dark      # render the menu bar item
-AI_USAGE_CONFIG=/tmp/test.json swift run AIUsage --dump    # use a different accounts file
+python3 tests/check_diagnostics.py                    # verify diagnostic privacy
+swift run AIUsage --dump                              # print sample usage as text
+swift run AIUsage --render-panel panel.png --dark     # render a sample dropdown
+swift run AIUsage --render-menubar menubar.png --dark # render a sample menu bar
+AI_USAGE_CONFIG=/tmp/test.json swift run AIUsage      # use another config in the live app
 ```
 
-The screenshots in `docs/` are made with `--sample`, so they contain no real account data.
+All diagnostic commands use synthetic accounts and usage, and never read your account config,
+credentials, or session logs or call usage APIs. `--sample` remains accepted for compatibility,
+but sample data is mandatory even without it. Invalid command-line arguments exit without
+starting the live app. Image-write failures show a generic error without filesystem paths.
+The screenshots in `docs/` contain only sample data.
+
 
 | File | Purpose |
 | --- | --- |
