@@ -1,77 +1,149 @@
 # AI Usage
 
-A macOS menu bar app that shows how much of your AI subscription limits you have used, for several
-Claude Code and Codex logins at once.
+A tiny macOS menu bar app that shows how much of your **Claude Code** and **Codex** subscription
+limits you've used, for **several accounts at once**.
 
-The menu bar shows a provider icon (the Claude Code mascot or the OpenAI knot for Codex) and the
-used percentage of each account's tightest limit, in config order, with a dot between groups:
-`[claude] 96% [codex] 50% · [claude] 5% [codex] 1%`. The dropdown lists the same accounts in the
-same order, with every limit (session / 5-hour, weekly, per-model weekly, Enterprise monthly
-spend) and the time until it resets.
+<p align="center">
+  <img src="docs/menubar.png" alt="Menu bar item showing four accounts" width="436"><br><br>
+  <img src="docs/panel.png" alt="Dropdown with usage per account" width="280">
+</p>
 
-## Build and run
+If you switch between logins with `CLAUDE_CONFIG_DIR` or `CODEX_HOME` (a work account and a
+personal one, say), this shows all of them side by side. It reads the logins the CLIs already have,
+so there's nothing to sign in to.
 
-Requires macOS 14+ and the Swift toolchain (Xcode or Command Line Tools).
+## Features
+
+- **One number per account in the menu bar:** the used percentage of its tightest limit, with a
+  Claude or Codex icon, and a dot between groups of accounts.
+- **Every limit in the dropdown**, with the time until it resets:
+  - **Claude:** 5-hour session, weekly, per-model weekly (e.g. Fable), and the monthly spend
+    cap on Enterprise plans.
+  - **Codex:** 5-hour, weekly, and any extra per-model limits.
+- **Colour-coded:** bars turn orange at 75% and red at 90%.
+- **Read-only and safe:** never writes to the CLIs' files or keychain items and never refreshes
+  their tokens. See [Safety](#safety).
+- **Small and native:** SwiftUI `MenuBarExtra`, no Dock icon, no dependencies, and no Xcode
+  project (just SwiftPM).
+
+## Requirements
+
+- macOS 14 (Sonoma) or later
+- Swift 6 toolchain (Xcode or the Command Line Tools)
+- A Claude Code and/or Codex CLI login on the Mac
+
+## Install
 
 ```sh
-scripts/bundle.sh             # build, install to ~/Applications/AIUsage.app and launch
-scripts/bundle.sh --no-open   # build and install only
-swift run AIUsage --dump      # print what the app would show, without the UI
-swift run AIUsage --render-panel panel.png      # render the dropdown with live data
-swift run AIUsage --render-menubar menubar.png  # render the menu bar item with sample data
+git clone https://github.com/kletse/kletse-ai-usage-macos.git
+cd kletse-ai-usage-macos
+scripts/bundle.sh
 ```
 
-Launch at login is turned on at first launch; turn it off in System Settings → General → Login Items.
+`bundle.sh` builds a release binary, wraps it in `AIUsage.app` (ad-hoc signed), installs it to
+`~/Applications`, and starts it. Run it again to update. The app turns on *Open at login* the
+first time it starts; you can switch that off in System Settings → General → Login Items.
 
-## Accounts
+## Configure your accounts
 
-Accounts live in `~/.config/ai-usage/accounts.json` (created on first run). Edits are picked up
-on the next refresh.
+On first run the app creates `~/.config/ai-usage/accounts.json`. Edit it to match your logins;
+changes are picked up on the next refresh (every 5 minutes, or click ↻).
 
 ```json
 [
-  { "name": "Claude",      "group": "Work",   "provider": "claude", "dir": "~/.claude-work" },
-  { "name": "Codex",       "group": "Work",   "provider": "codex",  "dir": "~/.codex-work" },
-  { "name": "Claude",      "group": "Kletse", "provider": "claude", "dir": "~/.claude" },
-  { "name": "Codex",       "group": "Kletse", "provider": "codex",  "dir": "~/.codex" }
+  { "name": "Claude", "group": "Work",     "provider": "claude", "dir": "~/.claude-work" },
+  { "name": "Codex",  "group": "Work",     "provider": "codex",  "dir": "~/.codex-work" },
+  { "name": "Claude", "group": "Personal", "provider": "claude", "dir": "~/.claude" },
+  { "name": "Codex",  "group": "Personal", "provider": "codex",  "dir": "~/.codex" }
 ]
 ```
 
-- The order of the list is the order in the menu bar and the dropdown.
-- `group` is optional. Accounts in the same group are shown together under a header, and the
-  menu bar puts a dot wherever the group changes.
-- `dir` is the `CLAUDE_CONFIG_DIR` or `CODEX_HOME` of that login.
-- `short` is an optional label, only used by `--dump`.
-- Claude accounts may set `keychainService` to override the derived keychain item name.
-- `AI_USAGE_CONFIG=/path/to/accounts.json` uses a different config file.
+| Field | Meaning |
+| --- | --- |
+| `name` | Shown in the dropdown. |
+| `provider` | `claude` or `codex`. |
+| `dir` | That login's `CLAUDE_CONFIG_DIR` or `CODEX_HOME`. Use `~/.claude` / `~/.codex` for the default login. |
+| `group` | Optional. Accounts in a group are shown together under a header, with a dot between groups in the menu bar. |
+| `keychainService` | Optional, Claude only. Overrides the keychain item name (see below). |
+| `short` | Optional label, only used by `--dump`. |
 
-## Where the data comes from
+The order of the list is the order in the menu bar and the dropdown. For example, with shell
+aliases like these you would add `~/.claude-work` and `~/.codex-work` as above:
 
-**Claude Code** — `GET https://api.anthropic.com/api/oauth/usage`, the endpoint behind `/usage`.
-- The OAuth token is read from the keychain with `/usr/bin/security`, the tool Claude Code uses
-  to store it, so no keychain prompt appears.
-- The service is `Claude Code-credentials` for the default `~/.claude`. With `CLAUDE_CONFIG_DIR`
-  set, it's `Claude Code-credentials-<first 8 hex chars of sha256(absolute config dir)>`.
-- Enterprise accounts report a monthly spend cap instead of session/weekly windows. The API gives
-  no reset date for it, so the app assumes the 1st of next month (shown as `~`).
-- If the token is expired or rejected, the app shows Claude Code's own last cached usage from
-  `.claude.json` (`cachedUsageUtilization`), marked as cached.
+```sh
+alias cc='CLAUDE_CONFIG_DIR=~/.claude-work claude'
+alias co='CODEX_HOME=~/.codex-work codex'
+```
 
-**Codex** — `GET https://chatgpt.com/backend-api/wham/usage`, the data behind `/status`.
-- The token and account ID come from `$CODEX_HOME/auth.json`.
-- If the call fails, the app shows the newest `rate_limits` snapshot from
-  `$CODEX_HOME/sessions/**/*.jsonl`, marked as cached.
+## How it works
+
+### Claude Code
+
+- **Endpoint:** `GET https://api.anthropic.com/api/oauth/usage`, the same one `/usage` uses.
+- **Token:** read from the login keychain with `/usr/bin/security`, the tool Claude Code itself
+  uses to store it, so macOS doesn't show a keychain prompt.
+- **Keychain item name:** `Claude Code-credentials` for the default `~/.claude`. With
+  `CLAUDE_CONFIG_DIR` set, Claude Code adds a suffix: the first 8 hex characters of the SHA-256 of
+  the absolute config path, e.g. `Claude Code-credentials-1a2b3c4d`. The app works this out for
+  you.
+- **Enterprise plans** report a monthly spend cap instead of session and weekly windows. The API
+  doesn't say when it resets, so the app assumes the 1st of the month (shown as `~`).
+- **When the token has expired**, the app shows the usage Claude Code last cached in its
+  `.claude.json`, marked as cached, until you next use the CLI.
+
+### Codex
+
+- **Endpoint:** `GET https://chatgpt.com/backend-api/wham/usage`, the data behind `/status`.
+- **Token:** the ChatGPT login from `$CODEX_HOME/auth.json`.
+- **If the request fails**, the app shows the newest rate-limit snapshot Codex wrote to
+  `$CODEX_HOME/sessions/`, marked as cached.
 
 ## Safety
 
 - **Read-only.** The app never writes to the CLIs' config files or keychain items.
-- **No token refresh.** Refreshing rotates the refresh token and would log the CLI out. Using the
-  CLI refreshes it; the app picks up the new token on the next poll.
-- **No secrets in output.** Tokens stay in memory. Errors show HTTP status codes only, never
-  response bodies or tokens.
-- Polls every 5 minutes and backs off on HTTP 429 (`Retry-After`).
+- **No token refresh.** Refreshing would rotate the refresh token and could log the CLI out, so
+  the app leaves that to the CLI and picks up the new token on the next poll.
+- **No secrets in output.** Tokens stay in memory. Errors show HTTP status codes, never response
+  bodies or tokens.
+- **Gentle on the APIs.** It polls every 5 minutes and backs off when asked to (`429` +
+  `Retry-After`).
+
+These are private, undocumented endpoints that the official CLIs use. They can change at any
+time, which may break the app until it's updated.
+
+## Development
+
+```sh
+swift build
+swift run AIUsage --dump                                   # print your accounts' usage as text
+swift run AIUsage --render-panel panel.png                 # render the dropdown with your data
+swift run AIUsage --render-panel panel.png --sample --dark # …or with made-up sample accounts
+swift run AIUsage --render-menubar menubar.png --dark      # render the menu bar item
+AI_USAGE_CONFIG=/tmp/test.json swift run AIUsage --dump    # use a different accounts file
+```
+
+The screenshots in `docs/` are made with `--sample`, so they contain no real account data.
+
+| File | Purpose |
+| --- | --- |
+| `Sources/AIUsage/ClaudeProvider.swift` | Claude keychain lookup, usage request, cache fallback |
+| `Sources/AIUsage/CodexProvider.swift` | Codex `auth.json`, usage request, session-log fallback |
+| `Sources/AIUsage/UsageStore.swift` | Polling, back-off, state per account |
+| `Sources/AIUsage/Views.swift` | Menu bar extra and dropdown UI |
+| `Sources/AIUsage/Icons.swift` | Provider icons and the menu bar image |
+| `Sources/AIUsage/Config.swift` | `accounts.json` loading and defaults |
+| `scripts/bundle.sh` | Builds, signs, installs and launches the `.app` |
 
 ## Credits
 
-The Codex icon is the OpenAI knot as shipped in [CodexBar](https://github.com/steipete/CodexBar)
-(MIT). The Claude icon is drawn from the block characters Claude Code prints on startup.
+- Inspired by [CodexBar](https://github.com/steipete/CodexBar) by Peter Steinberger, whose source
+  showed how to read these endpoints safely.
+- The Codex icon is the OpenAI knot as shipped in CodexBar (MIT). The Claude icon is drawn from
+  the block characters Claude Code prints on startup.
+
+Not affiliated with or endorsed by Anthropic or OpenAI. Claude and Claude Code are trademarks of
+Anthropic; Codex and OpenAI are trademarks of OpenAI.
+
+## License
+
+[MIT](LICENSE) © 2026 Ward Werbrouck

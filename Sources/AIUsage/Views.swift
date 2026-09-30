@@ -66,7 +66,7 @@ struct UsagePanel: View {
                     Image(systemName: "arrow.clockwise")
                 }
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .help("Refresh now")
             .disabled(store.isRefreshing)
             Button {
@@ -74,7 +74,7 @@ struct UsagePanel: View {
             } label: {
                 Image(systemName: "power")
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .help("Quit AI Usage")
         }
     }

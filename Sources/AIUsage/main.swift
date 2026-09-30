@@ -1,5 +1,4 @@
 import AppKit
-import SwiftUI
 
 func fetchSnapshot(for account: AccountConfig) async throws -> UsageSnapshot {
     switch account.provider {
@@ -31,40 +30,21 @@ func dump() async {
     }
 }
 
-/// `AIUsage --render-menubar out.png` writes the menu bar image at 4x, for checking the layout.
 if let index = CommandLine.arguments.firstIndex(of: "--render-menubar"), index + 1 < CommandLine.arguments.count {
-    let segments: [MenuBarSegment] = [
-        .account(.claude, "96%"), .account(.codex, "50%"), .separator, .account(.claude, "5%"), .account(.codex, "1%"),
-    ]
-    let image = MenuBarImage.render(segments)
-    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(image.size.width * 4), pixelsHigh: Int(image.size.height * 4),
-                               bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
-                               colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-    rep.size = image.size
-    NSGraphicsContext.saveGraphicsState()
-    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-    NSColor.white.setFill()
-    NSRect(origin: .zero, size: image.size).fill()
-    image.draw(in: NSRect(origin: .zero, size: image.size))
-    NSGraphicsContext.restoreGraphicsState()
-    try rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
+    try DebugRender.menuBar(to: CommandLine.arguments[index + 1], dark: CommandLine.arguments.contains("--dark"))
     exit(0)
 }
 
-/// `AIUsage --render-panel out.png` fetches live data and writes the dropdown at 2x.
 if let index = CommandLine.arguments.firstIndex(of: "--render-panel"), index + 1 < CommandLine.arguments.count {
-    let path = CommandLine.arguments[index + 1]
-    await MainActor.run { _ = NSApplication.shared }
-    let store = UsageStore()
-    await store.refresh()
-    await MainActor.run {
-        let renderer = ImageRenderer(content: UsagePanel(store: store).background(Color(nsColor: .windowBackgroundColor)))
-        renderer.scale = 2
-        if let image = renderer.nsImage, let tiff = image.tiffRepresentation,
-           let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
-            try? png.write(to: URL(fileURLWithPath: path))
-        }
+    _ = NSApplication.shared
+    let store: UsageStore
+    if CommandLine.arguments.contains("--sample") {
+        store = DebugRender.sampleStore()
+    } else {
+        store = UsageStore()
+        await store.refresh()
     }
+    try DebugRender.panel(store, to: CommandLine.arguments[index + 1], dark: CommandLine.arguments.contains("--dark"))
     exit(0)
 }
 

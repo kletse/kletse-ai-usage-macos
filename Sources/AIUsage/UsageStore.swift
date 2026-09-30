@@ -20,6 +20,13 @@ final class UsageStore {
     @ObservationIgnored private var retryAfter: [String: Date] = [:]
     @ObservationIgnored private var pollTask: Task<Void, Never>?
 
+    /// A store with fixed data and no polling, for rendering screenshots.
+    init(fixed: [(AccountConfig, UsageSnapshot)]) {
+        accounts = fixed.map(\.0)
+        states = Dictionary(uniqueKeysWithValues: fixed.map { ($0.0.id, AccountState(snapshot: $0.1)) })
+        lastRefresh = Date()
+    }
+
     init() {
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
