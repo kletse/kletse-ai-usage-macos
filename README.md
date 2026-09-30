@@ -30,10 +30,10 @@ on the next refresh.
 
 ```json
 [
-  { "name": "Claude Code work", "group": "Work",     "provider": "claude", "dir": "~/.claude-work" },
-  { "name": "Codex work",       "group": "Work",     "provider": "codex",  "dir": "~/.codex-work" },
-  { "name": "Claude Kletse",    "group": "Personal", "provider": "claude", "dir": "~/.claude" },
-  { "name": "Codex Kletse",     "group": "Personal", "provider": "codex",  "dir": "~/.codex" }
+  { "name": "Claude Code", "group": "Work",   "provider": "claude", "dir": "~/.claude-work" },
+  { "name": "Codex",       "group": "Work",   "provider": "codex",  "dir": "~/.codex-work" },
+  { "name": "Claude",      "group": "Kletse", "provider": "claude", "dir": "~/.claude" },
+  { "name": "Codex",       "group": "Kletse", "provider": "codex",  "dir": "~/.codex" }
 ]
 ```
 
