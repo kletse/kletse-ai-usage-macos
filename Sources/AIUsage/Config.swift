@@ -7,10 +7,12 @@ enum Provider: String, Codable, Sendable {
 
 /// One entry in `~/.config/ai-usage/accounts.json`.
 struct AccountConfig: Codable, Sendable, Identifiable, Hashable {
-    /// Short label shown in the menu bar, e.g. "CC".
-    var short: String
-    /// Longer name shown in the dropdown.
+    /// Name shown in the dropdown.
     var name: String
+    /// Accounts with the same group sit together; a dot separates groups in the menu bar.
+    var group: String?
+    /// Optional short label, e.g. "CC". Only used by `--dump`.
+    var short: String?
     var provider: Provider
     /// Claude: the `CLAUDE_CONFIG_DIR` (use "~/.claude" for the default login).
     /// Codex: the `CODEX_HOME` (use "~/.codex" for the default login).
@@ -18,7 +20,7 @@ struct AccountConfig: Codable, Sendable, Identifiable, Hashable {
     /// Optional override for the Claude keychain service name.
     var keychainService: String?
 
-    var id: String { short + "|" + dir }
+    var id: String { name + "|" + dir }
 
     var expandedDir: String { expandTilde(dir) }
 }
@@ -30,10 +32,10 @@ enum AppConfig {
     static var directory: String { (path as NSString).deletingLastPathComponent }
 
     static let defaults: [AccountConfig] = [
-        AccountConfig(short: "CC", name: "Claude Code work", provider: .claude, dir: "~/.claude-work"),
-        AccountConfig(short: "CCK", name: "Claude Code personal", provider: .claude, dir: "~/.claude"),
-        AccountConfig(short: "CO", name: "Codex work", provider: .codex, dir: "~/.codex-work"),
-        AccountConfig(short: "COK", name: "Codex personal", provider: .codex, dir: "~/.codex"),
+        AccountConfig(name: "Claude Code work", group: "Work", short: "CC", provider: .claude, dir: "~/.claude-work"),
+        AccountConfig(name: "Codex work", group: "Work", short: "CO", provider: .codex, dir: "~/.codex-work"),
+        AccountConfig(name: "Claude Kletse", group: "Personal", short: "CCK", provider: .claude, dir: "~/.claude"),
+        AccountConfig(name: "Codex Kletse", group: "Personal", short: "COK", provider: .codex, dir: "~/.codex"),
     ]
 
     /// Loads the account list, writing the defaults on first run.

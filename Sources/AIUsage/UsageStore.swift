@@ -29,14 +29,16 @@ final class UsageStore {
         }
     }
 
-    /// Compact text for the menu bar, e.g. "CC 96% CCK 4% CO 50% COK 1%" (percentage used).
-    var menuBarText: String {
-        if configError != nil { return "AI ⚠" }
-        if accounts.isEmpty { return "AI …" }
-        return accounts.map { account in
-            guard let used = states[account.id]?.snapshot?.maxUsedPercent else { return "\(account.short) –" }
-            return "\(account.short) \(Int(used.rounded()))%"
-        }.joined(separator: " ")
+    /// Menu bar content in config order: a provider icon plus the highest used percentage per
+    /// account, with a dot wherever the group changes.
+    var menuBarSegments: [MenuBarSegment] {
+        var segments: [MenuBarSegment] = []
+        for (index, account) in accounts.enumerated() {
+            if index > 0, account.group != accounts[index - 1].group { segments.append(.separator) }
+            let used = states[account.id]?.snapshot?.maxUsedPercent
+            segments.append(.account(account.provider, used.map { "\(Int($0.rounded()))%" } ?? "–"))
+        }
+        return segments
     }
 
     func refresh() async {

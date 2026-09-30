@@ -3,9 +3,11 @@
 A macOS menu bar app that shows how much of your AI subscription limits you have used, for several
 Claude Code and Codex logins at once.
 
-The menu bar shows one number per account: the used percentage of its tightest limit, e.g.
-`CC 96% CCK 4% CO 50% COK 1%`. The dropdown lists every limit (session / 5-hour, weekly,
-per-model weekly, Enterprise monthly spend) with the time until it resets.
+The menu bar shows a provider icon (the Claude Code mascot or the OpenAI knot for Codex) and the
+used percentage of each account's tightest limit, in config order, with a dot between groups:
+`[claude] 96% [codex] 50% · [claude] 5% [codex] 1%`. The dropdown lists the same accounts in the
+same order, with every limit (session / 5-hour, weekly, per-model weekly, Enterprise monthly
+spend) and the time until it resets.
 
 ## Build and run
 
@@ -15,9 +17,11 @@ Requires macOS 14+ and the Swift toolchain (Xcode or Command Line Tools).
 scripts/bundle.sh             # build, install to ~/Applications/AIUsage.app and launch
 scripts/bundle.sh --no-open   # build and install only
 swift run AIUsage --dump      # print what the app would show, without the UI
+swift run AIUsage --render-panel panel.png      # render the dropdown with live data
+swift run AIUsage --render-menubar menubar.png  # render the menu bar item with sample data
 ```
 
-Launch at login is turned on at first launch; toggle it in the dropdown.
+Launch at login is turned on at first launch; turn it off in System Settings → General → Login Items.
 
 ## Accounts
 
@@ -26,14 +30,18 @@ on the next refresh.
 
 ```json
 [
-  { "short": "CC",  "name": "Claude Code work",     "provider": "claude", "dir": "~/.claude-work" },
-  { "short": "CCK", "name": "Claude Code personal", "provider": "claude", "dir": "~/.claude" },
-  { "short": "CO",  "name": "Codex work",           "provider": "codex",  "dir": "~/.codex-work" },
-  { "short": "COK", "name": "Codex personal",       "provider": "codex",  "dir": "~/.codex" }
+  { "name": "Claude Code work", "group": "Work",     "provider": "claude", "dir": "~/.claude-work" },
+  { "name": "Codex work",       "group": "Work",     "provider": "codex",  "dir": "~/.codex-work" },
+  { "name": "Claude Kletse",    "group": "Personal", "provider": "claude", "dir": "~/.claude" },
+  { "name": "Codex Kletse",     "group": "Personal", "provider": "codex",  "dir": "~/.codex" }
 ]
 ```
 
+- The order of the list is the order in the menu bar and the dropdown.
+- `group` is optional. Accounts in the same group are shown together under a header, and the
+  menu bar puts a dot wherever the group changes.
 - `dir` is the `CLAUDE_CONFIG_DIR` or `CODEX_HOME` of that login.
+- `short` is an optional label, only used by `--dump`.
 - Claude accounts may set `keychainService` to override the derived keychain item name.
 - `AI_USAGE_CONFIG=/path/to/accounts.json` uses a different config file.
 
@@ -62,3 +70,8 @@ on the next refresh.
 - **No secrets in output.** Tokens stay in memory. Errors show HTTP status codes only, never
   response bodies or tokens.
 - Polls every 5 minutes and backs off on HTTP 429 (`Retry-After`).
+
+## Credits
+
+The Codex icon is the OpenAI knot as shipped in [CodexBar](https://github.com/steipete/CodexBar)
+(MIT). The Claude icon is drawn from the block characters Claude Code prints on startup.
