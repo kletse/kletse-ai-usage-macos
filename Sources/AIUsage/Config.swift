@@ -32,7 +32,7 @@ enum AppConfig {
     static var directory: String { (path as NSString).deletingLastPathComponent }
 
     static let defaults: [AccountConfig] = [
-        AccountConfig(name: "Claude Code", group: "Work", short: "CC", provider: .claude, dir: "~/.claude-work"),
+        AccountConfig(name: "Claude", group: "Work", short: "CC", provider: .claude, dir: "~/.claude-work"),
         AccountConfig(name: "Codex", group: "Work", short: "CO", provider: .codex, dir: "~/.codex-work"),
         AccountConfig(name: "Claude", group: "Kletse", short: "CCK", provider: .claude, dir: "~/.claude"),
         AccountConfig(name: "Codex", group: "Kletse", short: "COK", provider: .codex, dir: "~/.codex"),
