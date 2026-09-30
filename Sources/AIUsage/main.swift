@@ -34,3 +34,5 @@ if CommandLine.arguments.contains("--dump") {
     await dump()
     exit(0)
 }
+
+AIUsageApp.main()
