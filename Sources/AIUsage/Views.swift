@@ -58,7 +58,7 @@ struct UsagePanel: View {
         func body(content: Content) -> some View {
             if enabled {
                 content
-                    .glassPanel(cornerRadius: PanelStyle.cornerRadius)
+                    .glassPanel()
                     .background(RoundedWindowCorners(radius: PanelStyle.cornerRadius))
             } else {
                 content
@@ -136,8 +136,7 @@ struct AccountCard: View {
             }
         }
         .padding(12)
-        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.primary.opacity(0.08)))
+        .cardBackground()
     }
 }
 

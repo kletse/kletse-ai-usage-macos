@@ -2,19 +2,28 @@ import AppKit
 import SwiftUI
 
 enum PanelStyle {
-    static let cornerRadius: CGFloat = 26
+    /// About the corner radius macOS 26 uses for windows and popovers.
+    static let cornerRadius: CGFloat = 16
+    static let cardCornerRadius: CGFloat = 10
 }
 
 extension View {
     /// Liquid Glass on macOS 26+, a translucent material before that, clipped to rounded corners.
     @ViewBuilder
-    func glassPanel(cornerRadius: CGFloat) -> some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+    func glassPanel() -> some View {
+        let shape = RoundedRectangle(cornerRadius: PanelStyle.cornerRadius, style: .continuous)
         if #available(macOS 26, *) {
             glassEffect(.regular, in: shape)
         } else {
             background(.ultraThinMaterial, in: shape).clipShape(shape)
         }
+    }
+
+    /// Translucent tile for an account, so the glass shows through.
+    func cardBackground() -> some View {
+        let shape = RoundedRectangle(cornerRadius: PanelStyle.cardCornerRadius, style: .continuous)
+        return background(Color.primary.opacity(0.06), in: shape)
+            .overlay(shape.strokeBorder(Color.primary.opacity(0.08)))
     }
 }
 
