@@ -30,32 +30,32 @@ struct UsagePanel: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 10) {
                 header
                 if let error = store.configError {
-                    Text(error).font(.caption).foregroundStyle(.red)
+                    Text(error).font(.callout).foregroundStyle(.red)
                 }
                 ForEach(Array(store.accounts.enumerated()), id: \.element.id) { index, account in
                     if let group = account.group, index == 0 || store.accounts[index - 1].group != group {
                         Text(group.uppercased())
-                            .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                            .padding(.top, index == 0 ? 0 : 2)
+                            .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                            .padding(.top, index == 0 ? 0 : 6)
                     }
                     AccountCard(account: account, state: store.states[account.id], now: context.date)
                 }
             }
-            .padding(10)
-            .frame(width: 280)
+            .padding(14)
+            .frame(width: 380)
         }
     }
 
     private var header: some View {
         HStack {
-            Text("AI Usage").font(.subheadline.weight(.semibold))
+            Text("AI Usage").font(.headline)
             Spacer()
             if let last = store.lastRefresh {
                 Text(last.formatted(date: .omitted, time: .shortened))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.callout).foregroundStyle(.secondary)
             }
             Button {
                 Task { await store.refresh() }
@@ -86,46 +86,46 @@ struct AccountCard: View {
     let now: Date
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
                 ProviderIconView(provider: account.provider)
-                Text(account.name).font(.caption.weight(.semibold))
+                Text(account.name).font(.body.weight(.semibold))
                 Spacer()
                 if let used = state?.snapshot?.maxUsedPercent {
                     Text("\(Int(used.rounded()))%")
-                        .font(.caption.weight(.semibold)).monospacedDigit()
+                        .font(.body.weight(.semibold)).monospacedDigit()
                         .foregroundStyle(color(forUsed: used))
                 }
             }
 
             if let snapshot = state?.snapshot {
                 Text([snapshot.identity, snapshot.plan].compactMap { $0 }.joined(separator: " · "))
-                    .font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    .font(.callout).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 ForEach(snapshot.windows) { window in
                     WindowRow(window: window, now: now)
                 }
                 if snapshot.windows.isEmpty {
-                    Text("No limits reported").font(.caption).foregroundStyle(.secondary)
+                    Text("No limits reported").font(.callout).foregroundStyle(.secondary)
                 }
                 if snapshot.staleReason != nil {
                     Text("Cached data from \(snapshot.fetchedAt.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))")
-                        .font(.caption2).foregroundStyle(.orange)
+                        .font(.caption).foregroundStyle(.orange)
                 }
             } else if state == nil {
-                Text("Loading…").font(.caption).foregroundStyle(.secondary)
+                Text("Loading…").font(.callout).foregroundStyle(.secondary)
             }
             if let error = state?.error {
-                Text(error).font(.caption2).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                Text(error).font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(8)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 7))
+        .padding(12)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
 struct ProviderIconView: View {
     let provider: Provider
-    private static let height: CGFloat = 10
+    private static let height: CGFloat = 14
     private static let claudeOrange = Color(red: 0.85, green: 0.47, blue: 0.34)
 
     var body: some View {
@@ -134,6 +134,8 @@ struct ProviderIconView: View {
             .renderingMode(.template)
             .foregroundStyle(provider == .claude ? Self.claudeOrange : Color.primary)
             .frame(width: size.width, height: size.height)
+            // Same slot width for every provider so account names line up.
+            .frame(width: ProviderIcon.size(for: .claude, height: Self.height).width)
     }
 }
 
@@ -142,18 +144,18 @@ struct WindowRow: View {
     let now: Date
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Text(window.label).font(.caption2)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text(window.label).font(.callout)
                 Spacer()
                 if let reset = window.resetsAt {
                     Text(resetText(reset))
-                        .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+                        .font(.callout).foregroundStyle(.secondary).monospacedDigit()
                         .help("Resets " + reset.formatted(date: .complete, time: .shortened))
                 }
                 Text("\(Int(window.displayUsedPercent.rounded()))%")
-                    .font(.caption2.weight(.medium)).monospacedDigit()
-                    .frame(minWidth: 30, alignment: .trailing)
+                    .font(.callout.weight(.semibold)).monospacedDigit()
+                    .frame(minWidth: 40, alignment: .trailing)
             }
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
@@ -163,9 +165,9 @@ struct WindowRow: View {
                         .frame(width: proxy.size.width * window.displayUsedPercent / 100)
                 }
             }
-            .frame(height: 4)
+            .frame(height: 6)
             if let detail = window.detail {
-                Text(detail).font(.caption2).foregroundStyle(.secondary)
+                Text(detail).font(.callout).foregroundStyle(.secondary)
             }
         }
     }
