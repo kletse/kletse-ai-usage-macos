@@ -83,44 +83,44 @@ struct CodexProvider: Sendable {
 
     /// Codex writes a `rate_limits` snapshot into its session logs after each turn.
     private func sessionLogSnapshot(reason: String, auth: Auth? = nil) throws -> UsageSnapshot {
-        guard let (file, modified) = newestSessionFile(),
-              let text = try? String(contentsOf: file, encoding: .utf8)
-        else { throw FetchError(reason) }
-
-        for line in text.split(separator: "\n").reversed() where line.contains("\"rate_limits\"") {
-            guard let data = line.data(using: .utf8),
-                  let entry = try? JSONDecoder().decode(SessionEntry.self, from: data),
-                  let limits = entry.payload?.rate_limits
-            else { continue }
-            let windows = [limits.primary, limits.secondary].compactMap { window -> UsageWindow? in
-                guard let window, let used = window.used_percent else { return nil }
-                return UsageWindow(
-                    label: CodexUsage.label(seconds: (window.window_minutes ?? 0) * 60),
-                    usedPercent: used,
-                    resetsAt: window.resets_at.map { Date(timeIntervalSince1970: $0) }
+        // The newest log may be a session that hasn't finished a turn yet, so look at a few.
+        for (file, modified) in newestSessionFiles(limit: 5) {
+            guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
+            for line in text.split(separator: "\n").reversed() where line.contains("\"rate_limits\"") {
+                guard let data = line.data(using: .utf8),
+                      let entry = try? JSONDecoder().decode(SessionEntry.self, from: data),
+                      let limits = entry.payload?.rate_limits
+                else { continue }
+                let windows = [limits.primary, limits.secondary].compactMap { window -> UsageWindow? in
+                    guard let window, let used = window.used_percent else { return nil }
+                    return UsageWindow(
+                        label: CodexUsage.label(seconds: (window.window_minutes ?? 0) * 60),
+                        usedPercent: used,
+                        resetsAt: window.resets_at.map { Date(timeIntervalSince1970: $0) }
+                    )
+                }
+                return UsageSnapshot(
+                    windows: windows,
+                    identity: auth?.email,
+                    plan: Self.planName(limits.plan_type ?? auth?.plan),
+                    fetchedAt: Dates.parseISO(entry.timestamp) ?? modified,
+                    staleReason: reason
                 )
             }
-            return UsageSnapshot(
-                windows: windows,
-                identity: auth?.email,
-                plan: Self.planName(limits.plan_type ?? auth?.plan),
-                fetchedAt: Dates.parseISO(entry.timestamp) ?? modified,
-                staleReason: reason
-            )
         }
         throw FetchError(reason)
     }
 
-    private func newestSessionFile() -> (URL, Date)? {
-        let root = URL(fileURLWithPath: account.expandedDir + "/sessions")
+    private func newestSessionFiles(limit: Int) -> [(URL, Date)] {
+        let root = URL(fileURLWithPath: account.expandedDir + "/sessions").resolvingSymlinksInPath()
         let keys: [URLResourceKey] = [.contentModificationDateKey]
-        guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: keys) else { return nil }
-        var newest: (URL, Date)?
+        guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: keys) else { return [] }
+        var files: [(URL, Date)] = []
         for case let url as URL in enumerator where url.pathExtension == "jsonl" {
             guard let date = try? url.resourceValues(forKeys: Set(keys)).contentModificationDate else { continue }
-            if newest == nil || date > newest!.1 { newest = (url, date) }
+            files.append((url, date))
         }
-        return newest
+        return Array(files.sorted { $0.1 > $1.1 }.prefix(limit))
     }
 
     private struct SessionEntry: Decodable {

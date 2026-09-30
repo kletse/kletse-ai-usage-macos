@@ -24,8 +24,10 @@ struct AccountConfig: Codable, Sendable, Identifiable, Hashable {
 }
 
 enum AppConfig {
-    static let directory = expandTilde("~/.config/ai-usage")
-    static let path = directory + "/accounts.json"
+    /// `AI_USAGE_CONFIG` overrides the location, e.g. for testing with `--dump`.
+    static let path = ProcessInfo.processInfo.environment["AI_USAGE_CONFIG"].map(expandTilde)
+        ?? expandTilde("~/.config/ai-usage/accounts.json")
+    static var directory: String { (path as NSString).deletingLastPathComponent }
 
     static let defaults: [AccountConfig] = [
         AccountConfig(short: "CC", name: "Claude Code work", provider: .claude, dir: "~/.claude-work"),
