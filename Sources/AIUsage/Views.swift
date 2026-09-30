@@ -46,6 +46,8 @@ struct UsagePanel: View {
             }
             .padding(14)
             .frame(width: 380)
+            .glassPanel(cornerRadius: PanelStyle.cornerRadius)
+            .background(RoundedWindowCorners(radius: PanelStyle.cornerRadius))
         }
     }
 
@@ -119,7 +121,8 @@ struct AccountCard: View {
             }
         }
         .padding(12)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.primary.opacity(0.08)))
     }
 }
 

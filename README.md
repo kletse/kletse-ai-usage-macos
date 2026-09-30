@@ -23,7 +23,8 @@ so there's nothing to sign in to.
 - **Colour-coded:** bars turn orange at 75% and red at 90%.
 - **Read-only and safe:** never writes to the CLIs' files or keychain items and never refreshes
   their tokens. See [Safety](#safety).
-- **Small and native:** SwiftUI `MenuBarExtra`, no Dock icon, no dependencies, and no Xcode
+- **Small and native:** SwiftUI `MenuBarExtra` with a rounded Liquid Glass panel on macOS 26+
+  (a translucent material on older versions), no Dock icon, no dependencies, and no Xcode
   project (just SwiftPM).
 
 ## Requirements
