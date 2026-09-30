@@ -98,14 +98,19 @@ struct UsagePanel: View {
 }
 
 struct AccountCard: View {
+    private static let nameCapHeight = NSFont.systemFont(ofSize: NSFont.preferredFont(forTextStyle: .body).pointSize,
+                                                         weight: .semibold).capHeight
+
     let account: AccountConfig
     let state: AccountState?
     let now: Date
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                // Center the icon on the name's capital letters rather than its line box.
                 ProviderIconView(provider: account.provider)
+                    .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + Self.nameCapHeight / 2 }
                 Text(account.name).font(.body.weight(.semibold))
                 Spacer()
                 if let used = state?.snapshot?.maxUsedPercent {
