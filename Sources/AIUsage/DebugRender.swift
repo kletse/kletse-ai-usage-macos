@@ -63,8 +63,18 @@ enum DebugRender {
     }
 
     static func panel(to path: String, dark: Bool) throws {
-        let content = UsagePanel(store: sampleStore())
-            .background(dark ? Color(white: 0.16) : Color(white: 0.93))
+        // Offscreen renders can't draw Liquid Glass, so approximate it: a translucent rounded
+        // panel over a colourful gradient.
+        let shape = RoundedRectangle(cornerRadius: PanelStyle.cornerRadius, style: .continuous)
+        let content = UsagePanel(store: sampleStore(), windowChrome: false)
+            .background((dark ? Color.black.opacity(0.45) : Color.white.opacity(0.55)), in: shape)
+            .overlay(shape.strokeBorder(Color.white.opacity(dark ? 0.18 : 0.5)))
+            .padding(36)
+            .background(
+                LinearGradient(colors: [Color(red: 0.36, green: 0.25, blue: 0.75), Color(red: 0.1, green: 0.45, blue: 0.6),
+                                        Color(red: 0.85, green: 0.45, blue: 0.35)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            )
             .environment(\.colorScheme, dark ? .dark : .light)
         let renderer = ImageRenderer(content: content)
         renderer.scale = 2

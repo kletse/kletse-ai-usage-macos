@@ -27,6 +27,8 @@ struct AIUsageApp: App {
 
 struct UsagePanel: View {
     let store: UsageStore
+    /// Glass and window rounding. Off for offscreen renders, which can't draw either.
+    var windowChrome = true
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
@@ -46,8 +48,21 @@ struct UsagePanel: View {
             }
             .padding(14)
             .frame(width: 380)
-            .glassPanel(cornerRadius: PanelStyle.cornerRadius)
-            .background(RoundedWindowCorners(radius: PanelStyle.cornerRadius))
+            .modifier(WindowChrome(enabled: windowChrome))
+        }
+    }
+
+    private struct WindowChrome: ViewModifier {
+        let enabled: Bool
+
+        func body(content: Content) -> some View {
+            if enabled {
+                content
+                    .glassPanel(cornerRadius: PanelStyle.cornerRadius)
+                    .background(RoundedWindowCorners(radius: PanelStyle.cornerRadius))
+            } else {
+                content
+            }
         }
     }
 

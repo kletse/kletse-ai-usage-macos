@@ -5,7 +5,7 @@ limits you've used, for **several accounts at once**.
 
 <p align="center">
   <img src="docs/menubar.png" alt="Menu bar item showing four accounts" width="436"><br><br>
-  <img src="docs/panel.png" alt="Dropdown with usage per account" width="380">
+  <img src="docs/panel.png" alt="Dropdown with usage per account" width="452">
 </p>
 
 If you switch between logins with `CLAUDE_CONFIG_DIR` or `CODEX_HOME` (a work account and a
