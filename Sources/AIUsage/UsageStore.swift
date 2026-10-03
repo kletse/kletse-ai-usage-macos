@@ -36,13 +36,13 @@ final class UsageStore {
         }
     }
 
-    /// Menu bar content in config order: a provider icon plus the highest used percentage per
-    /// account, with a dot wherever the group changes.
+    /// Menu bar content in config order: a provider icon plus the used percentage of the
+    /// shortest-period limit per account, with a dot wherever the group changes.
     var menuBarSegments: [MenuBarSegment] {
         var segments: [MenuBarSegment] = []
         for (index, account) in accounts.enumerated() {
             if index > 0, account.group != accounts[index - 1].group { segments.append(.separator) }
-            let used = states[account.id]?.snapshot?.maxUsedPercent
+            let used = states[account.id]?.snapshot?.headlineWindow?.displayUsedPercent
             segments.append(.account(account.provider, used.map { "\(Int($0.rounded()))%" } ?? "–"))
         }
         return segments

@@ -96,7 +96,8 @@ struct CodexProvider: Sendable {
                     return UsageWindow(
                         label: CodexUsage.label(seconds: (window.window_minutes ?? 0) * 60),
                         usedPercent: used,
-                        resetsAt: window.resets_at.map { Date(timeIntervalSince1970: $0) }
+                        resetsAt: window.resets_at.map { Date(timeIntervalSince1970: $0) },
+                        period: window.window_minutes.map { TimeInterval($0 * 60) }
                     )
                 }
                 return UsageSnapshot(
@@ -187,7 +188,8 @@ struct CodexUsage: Decodable {
             return UsageWindow(
                 label: prefix.map { "\(label) · \($0)" } ?? label,
                 usedPercent: used,
-                resetsAt: window.reset_at.map { Date(timeIntervalSince1970: $0) }
+                resetsAt: window.reset_at.map { Date(timeIntervalSince1970: $0) },
+                period: window.limit_window_seconds.map(TimeInterval.init)
             )
         }
     }

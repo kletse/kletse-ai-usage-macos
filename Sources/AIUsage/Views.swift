@@ -113,7 +113,7 @@ struct AccountCard: View {
                     .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + Self.nameCapHeight / 2 }
                 Text(account.name).font(.body.weight(.semibold))
                 Spacer()
-                if let used = state?.snapshot?.maxUsedPercent {
+                if let used = state?.snapshot?.headlineWindow?.displayUsedPercent {
                     Text("\(Int(used.rounded()))%")
                         .font(.body.weight(.semibold)).monospacedDigit()
                         .foregroundStyle(color(forUsed: used))

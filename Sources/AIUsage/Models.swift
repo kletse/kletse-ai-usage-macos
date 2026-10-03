@@ -9,6 +9,8 @@ struct UsageWindow: Sendable, Identifiable, Hashable {
     var detail: String?
     /// True when the reset time is a guess (e.g. the Enterprise monthly cap).
     var resetIsEstimate = false
+    /// Length of the limit window in seconds, e.g. 18 000 for a 5-hour session. Nil when unknown.
+    var period: TimeInterval?
 
     var id: String { label }
     /// Used percentage clamped to 0...100 for display.
@@ -25,8 +27,14 @@ struct UsageSnapshot: Sendable {
     /// Set when this came from a local cache instead of a live request.
     var staleReason: String?
 
-    /// The binding limit: the highest used percentage over all windows.
-    var maxUsedPercent: Double? { windows.map(\.displayUsedPercent).max() }
+    /// The headline limit: the window with the shortest period (session > week > month), taking
+    /// the first listed on a tie. Windows with an unknown period come last.
+    var headlineWindow: UsageWindow? {
+        windows.enumerated().min { a, b in
+            let (pa, pb) = (a.element.period ?? .infinity, b.element.period ?? .infinity)
+            return pa != pb ? pa < pb : a.offset < b.offset
+        }?.element
+    }
 }
 
 struct FetchError: Error, CustomStringConvertible {

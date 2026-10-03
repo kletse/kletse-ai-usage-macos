@@ -192,16 +192,17 @@ struct ClaudeUsage: Decodable {
         if let limits, !limits.isEmpty {
             for limit in limits {
                 guard let percent = limit.percent else { continue }
-                result.append(UsageWindow(label: Self.label(for: limit), usedPercent: percent, resetsAt: Dates.parseISO(limit.resets_at)))
+                result.append(UsageWindow(label: Self.label(for: limit), usedPercent: percent, resetsAt: Dates.parseISO(limit.resets_at),
+                                          period: Self.period(for: limit)))
             }
         } else {
-            let legacy: [(String, Window?)] = [
-                ("Session", five_hour), ("Week", seven_day),
-                ("Week · Opus", seven_day_opus), ("Week · Sonnet", seven_day_sonnet),
+            let legacy: [(String, TimeInterval, Window?)] = [
+                ("Session", Self.session, five_hour), ("Week", Self.week, seven_day),
+                ("Week · Opus", Self.week, seven_day_opus), ("Week · Sonnet", Self.week, seven_day_sonnet),
             ]
-            for (label, window) in legacy {
+            for (label, period, window) in legacy {
                 guard let window, let used = window.utilization else { continue }
-                result.append(UsageWindow(label: label, usedPercent: used, resetsAt: Dates.parseISO(window.resets_at)))
+                result.append(UsageWindow(label: label, usedPercent: used, resetsAt: Dates.parseISO(window.resets_at), period: period))
             }
         }
 
@@ -215,7 +216,8 @@ struct ClaudeUsage: Decodable {
                 usedPercent: used / limit * 100,
                 resetsAt: Dates.startOfNextMonth(),
                 detail: "\(Self.money(used, exponent: exponent, currency: currency)) of \(Self.money(limit, exponent: exponent, currency: currency))",
-                resetIsEstimate: true
+                resetIsEstimate: true,
+                period: Self.month
             ))
         } else if let extra = extra_usage, extra.is_enabled == true, let limit = extra.monthly_limit, limit > 0 {
             let used = extra.used_credits ?? 0
@@ -225,10 +227,23 @@ struct ClaudeUsage: Decodable {
                 usedPercent: extra.utilization ?? used / limit * 100,
                 resetsAt: Dates.startOfNextMonth(),
                 detail: "\(Self.money(used, exponent: 2, currency: currency)) of \(Self.money(limit, exponent: 2, currency: currency))",
-                resetIsEstimate: true
+                resetIsEstimate: true,
+                period: Self.month
             ))
         }
         return result
+    }
+
+    private static let session: TimeInterval = 5 * 3_600
+    private static let week: TimeInterval = 7 * 86_400
+    private static let month: TimeInterval = 30 * 86_400
+
+    private static func period(for limit: Limit) -> TimeInterval? {
+        switch limit.kind {
+        case "session": session
+        case "weekly_all", "weekly_scoped": week
+        default: nil
+        }
     }
 
     private static func label(for limit: Limit) -> String {
