@@ -45,8 +45,22 @@ struct RoundedWindowCorners: NSViewRepresentable {
 
         required init?(coder: NSCoder) { fatalError("not used") }
 
+        private var observers: [NSObjectProtocol] = []
+
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            observers.forEach(NotificationCenter.default.removeObserver)
+            observers = []
+            guard let window else { return }
+            // MenuBarExtra can keep a stale window size, e.g. after moving to another display.
+            // This view keeps its own frame then, so layout() alone would miss it.
+            let names = [NSWindow.didResizeNotification, NSWindow.didChangeScreenNotification,
+                         NSWindow.didChangeBackingPropertiesNotification, NSWindow.didBecomeKeyNotification]
+            observers = names.map { name in
+                NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.apply() }
+                }
+            }
             apply()
         }
 
@@ -63,7 +77,20 @@ struct RoundedWindowCorners: NSViewRepresentable {
             host.layer?.cornerRadius = radius
             host.layer?.cornerCurve = .continuous
             host.layer?.masksToBounds = true
+            fitWindowToPanel(window)
             window.invalidateShadow()
+        }
+
+        /// A window larger than the panel shows up as a square outline and shadow around the glass.
+        /// This view is the panel's background, so its size is the size the window should have.
+        private func fitWindowToPanel(_ window: NSWindow) {
+            var size = bounds.size
+            if let visible = window.screen?.visibleFrame { size.height = min(size.height, visible.height) }
+            guard size.width > 0, size.height > 0, window.frame.size != size else { return }
+            var frame = window.frame
+            frame.origin.y = frame.maxY - size.height
+            frame.size = size
+            window.setFrame(frame, display: true)
         }
     }
 }
