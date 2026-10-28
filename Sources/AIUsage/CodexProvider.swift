@@ -199,7 +199,9 @@ struct CodexUsage: Decodable {
         case 18_000: "5-hour"
         case 604_800: "Week"
         case let s where s > 0 && s % 86_400 == 0: "\(s / 86_400)-day"
-        case let s where s > 0: "\(s / 3_600)-hour"
+        case let s where s > 0 && s % 3_600 == 0: "\(s / 3_600)-hour"
+        case let s where s > 0 && s % 60 == 0: "\(s / 60)-minute"
+        case let s where s > 0: "\(s)-second"
         default: "Limit"
         }
     }

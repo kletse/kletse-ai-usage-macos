@@ -49,13 +49,18 @@ struct FetchError: Error, CustomStringConvertible {
 }
 
 enum Dates {
+    // ISO8601DateFormatter supports concurrent reads after configuration.
+    nonisolated(unsafe) private static let isoFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
     /// Parses ISO 8601 dates with or without fractional seconds of any length.
     static func parseISO(_ string: String?) -> Date? {
         guard let string else { return nil }
         let trimmed = string.replacingOccurrences(of: #"\.\d+"#, with: "", options: .regularExpression)
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: trimmed)
+        return isoFormatter.date(from: trimmed)
     }
 
     static func startOfNextMonth(after date: Date = Date()) -> Date? {

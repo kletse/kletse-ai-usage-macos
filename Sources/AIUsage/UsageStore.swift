@@ -51,7 +51,7 @@ final class UsageStore {
     func refresh() async {
         guard !isRefreshing else { return }
         isRefreshing = true
-        defer { isRefreshing = false }
+        defer { isRefreshing = false; lastRefresh = Date() }
 
         // Reload the config each time so edits apply without restarting.
         do {
@@ -95,6 +95,6 @@ final class UsageStore {
         // Forget accounts that were removed from the config.
         let ids = Set(accounts.map(\.id))
         states = states.filter { ids.contains($0.key) }
-        lastRefresh = Date()
+        retryAfter = retryAfter.filter { ids.contains($0.key) }
     }
 }

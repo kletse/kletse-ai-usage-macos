@@ -1,0 +1,9 @@
+name: Tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
+      - run: python3 tests/check_diagnostics.py

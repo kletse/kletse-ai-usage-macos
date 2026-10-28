@@ -6,5 +6,6 @@ let package = Package(
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(name: "AIUsage", path: "Sources/AIUsage"),
+        .testTarget(name: "AIUsageTests", dependencies: ["AIUsage"]),
     ]
 )
