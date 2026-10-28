@@ -4,7 +4,7 @@ A tiny macOS menu bar app that shows how much of your **Claude Code** and **Code
 limits you've used, for **several accounts at once**.
 
 <p align="center">
-  <img src="docs/menubar.png" alt="Menu bar item showing four accounts" width="436"><br><br>
+  <img src="docs/menubar.gif" alt="Menu bar item showing four accounts, with the Claude mascots animating as their usage goes up" width="452"><br><br>
   <img src="docs/panel.png" alt="Dropdown with usage per account" width="452">
 </p>
 
@@ -21,6 +21,8 @@ so there's nothing to sign in to.
     cap on Enterprise plans.
   - **Codex:** 5-hour, weekly, and any extra per-model limits.
 - **Colour-coded:** bars turn orange at 75% and red at 90%.
+- **An animated mascot:** each Claude mascot plays one of 35 little animations when its usage
+  changes, and now and then for no reason. See [The mascot](#the-mascot).
 - **Read-only and safe:** never writes to the CLIs' files or keychain items and never refreshes
   their tokens. See [Safety](#safety).
 - **Small and native:** SwiftUI `MenuBarExtra` with a rounded Liquid Glass panel on macOS 26+
@@ -60,9 +62,9 @@ Use the gear button in the menu bar panel to add, edit, or remove accounts. Chan
 automatically once every account has a name and login directory, and usage refreshes. You can
 also edit the JSON file directly.
 
-The Menu Bar page in the same window switches the Claude mascot between color and black and white,
-and turns its animations on or off. Mascots play a random animation when their usage changes, and
-one plays one about every ten minutes; Try Them… previews each animation.
+<p align="center">
+  <img src="docs/accounts.png" alt="Accounts window with a sidebar of accounts and the selected account's settings" width="560">
+</p>
 
 On first run the app creates `~/.config/ai-usage/accounts.json`. Edit it to match your logins;
 changes are picked up on the next refresh (every 5 minutes, or click ↻). Initial accounts are
@@ -99,6 +101,25 @@ aliases like these you would add `~/.claude-work` and `~/.codex-work` as above:
 alias cc='CLAUDE_CONFIG_DIR=~/.claude-work claude'
 alias co='CODEX_HOME=~/.codex-work codex'
 ```
+
+## The mascot
+
+Each Claude account's icon in the menu bar is the Claude Code mascot. When an account's usage
+changes, its mascot plays a random animation (two that change together never play the same one),
+and about every ten minutes one mascot plays one just because.
+
+<p align="center">
+  <img src="docs/animations.gif" alt="All 35 mascot animations playing in a grid" width="728">
+</p>
+
+The **Menu Bar** page at the top of the Accounts window switches the mascot between color and
+black and white (to match the other menu bar icons) and turns the animations off. **Try Them…**
+opens a sheet where you can play each animation, in the sheet and in the menu bar. Reduce Motion
+in System Settings also stops the animations.
+
+<p align="center">
+  <img src="docs/menubar-settings.png" alt="The Menu Bar settings page" width="560">
+</p>
 
 ## How it works
 
@@ -145,6 +166,9 @@ swift run AIUsage --dump                              # print sample usage as te
 swift run AIUsage --render-panel panel.png --dark     # render a sample dropdown
 swift run AIUsage --render-menubar menubar.png --dark # render a sample menu bar
 swift run AIUsage --render-accounts accounts.png      # render the account editor with sample data
+swift run AIUsage --render-menubar-settings menubar-settings.png --dark  # the Menu Bar page
+swift run AIUsage --render-menubar-gif menubar.gif --dark                # the mascots animating
+swift run AIUsage --render-animations animations.gif --dark              # every animation in a grid
 AI_USAGE_CONFIG=/tmp/test.json swift run AIUsage      # use another config in the live app
 ```
 
@@ -152,7 +176,7 @@ All diagnostic commands use synthetic accounts and usage, and never read your ac
 credentials, or session logs or call usage APIs. `--sample` remains accepted for compatibility,
 but sample data is mandatory even without it. Invalid command-line arguments exit without
 starting the live app. Image-write failures show a generic error without filesystem paths.
-The screenshots in `docs/` contain only sample data.
+The screenshots and GIFs in `docs/` contain only sample data.
 
 
 | File | Purpose |

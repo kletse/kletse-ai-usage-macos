@@ -14,13 +14,14 @@ struct AccountEditor: View {
     /// The sidebar tag of the Menu Bar page, alongside the account rows' IDs.
     private static let menuBarPage = UUID()
 
-    init(store: UsageStore, saver: AccountsAutosaver) {
+    /// `showMenuBar` opens on the Menu Bar page instead of the first account.
+    init(store: UsageStore, saver: AccountsAutosaver, showMenuBar: Bool = false) {
         self.store = store
         self.saver = saver
         // The saver has already loaded, so the window doesn't redraw from an empty state as it opens.
         let initialRows = saver.savedAccounts.map { Row(account: $0) }
         _rows = State(initialValue: initialRows)
-        _selection = State(initialValue: initialRows.first?.id)
+        _selection = State(initialValue: showMenuBar ? Self.menuBarPage : initialRows.first?.id)
     }
 
     private struct Row: Identifiable {

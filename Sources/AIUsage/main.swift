@@ -15,12 +15,18 @@ if !arguments.isEmpty {
     if flags == ["--dump"] {
         DebugRender.dump()
     } else if flags.count == 2,
-              ["--render-panel", "--render-menubar", "--render-accounts"].contains(flags[0]),
+              ["--render-panel", "--render-menubar", "--render-accounts", "--render-menubar-settings",
+               "--render-menubar-gif", "--render-animations"].contains(flags[0]),
               !flags[1].hasPrefix("--") {
         do {
-            if flags[0] == "--render-accounts" {
+            let dark = arguments.contains("--dark")
+            if flags[0] == "--render-accounts" || flags[0] == "--render-menubar-settings" {
                 _ = NSApplication.shared
-                try DebugRender.accounts(to: flags[1], dark: arguments.contains("--dark"))
+                try DebugRender.accounts(to: flags[1], dark: dark, showMenuBar: flags[0] == "--render-menubar-settings")
+            } else if flags[0] == "--render-menubar-gif" {
+                try DebugRender.menuBarGIF(to: flags[1], dark: dark)
+            } else if flags[0] == "--render-animations" {
+                try DebugRender.animationsGIF(to: flags[1], dark: dark)
             } else if flags[0] == "--render-panel" {
                 _ = NSApplication.shared
                 try DebugRender.panel(to: flags[1], dark: arguments.contains("--dark"))
@@ -33,7 +39,9 @@ if !arguments.isEmpty {
             exit(1)
         }
     } else {
-        print("Usage: AIUsage [--dump | --render-panel FILE | --render-menubar FILE | --render-accounts FILE] [--dark] [--sample]")
+        print("Usage: AIUsage [--dump | --render-panel FILE | --render-menubar FILE | --render-accounts FILE")
+        print("               | --render-menubar-settings FILE | --render-menubar-gif FILE | --render-animations FILE]")
+        print("               [--dark] [--sample]")
         print("Diagnostic commands always use sample data.")
         exit(2)
     }

@@ -1,10 +1,16 @@
 import AppKit
+import ImageIO
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// Renders the menu bar item and the dropdown to PNG files, for checking the layout and for
-/// README screenshots:
+/// Renders the menu bar item, the dropdown, the Accounts window and the mascot animations to
+/// PNG and GIF files, for checking the layout and for README screenshots:
 ///   AIUsage --render-menubar out.png [--dark]
 ///   AIUsage --render-panel out.png [--sample] [--dark]
+///   AIUsage --render-accounts out.png [--dark]
+///   AIUsage --render-menubar-settings out.png [--dark]
+///   AIUsage --render-menubar-gif out.gif [--dark]
+///   AIUsage --render-animations out.gif [--dark]
 /// All diagnostic output uses made-up accounts. `--sample` is accepted for compatibility.
 @MainActor
 enum DebugRender {
@@ -84,9 +90,10 @@ enum DebugRender {
     }
 
     /// Synthetic editor preview; never loads or saves the live configuration.
-    static func accounts(to path: String, dark: Bool) throws {
+    static func accounts(to path: String, dark: Bool, showMenuBar: Bool = false) throws {
         let store = sampleStore()
-        let content = AccountEditor(store: store, saver: AccountsAutosaver(store: store, sampleAccounts: store.accounts))
+        let content = AccountEditor(store: store, saver: AccountsAutosaver(store: store, sampleAccounts: store.accounts),
+                                    showMenuBar: showMenuBar)
             .frame(width: 840, height: 680)
             .background(Color(nsColor: .windowBackgroundColor))
             .environment(\.colorScheme, dark ? .dark : .light)
@@ -109,8 +116,117 @@ enum DebugRender {
         try png.write(to: URL(fileURLWithPath: path))
     }
 
-    /// Template images draw black; fill them with a color for a preview.
+    // MARK: - Animations
+
+    private static let gifFrameRate: Double = 25
+
+    /// The sample menu bar for about 12 seconds: the mascots take turns animating as their
+    /// usage ticks up, then both go at once, as after a refresh that changed both.
+    static func menuBarGIF(to path: String, dark: Bool) throws {
+        var segments = sampleStore().menuBarSegments
+        let claudes = segments.indices.filter { if case .account(.claude, _) = segments[$0] { true } else { false } }
+        guard claudes.count >= 2 else { throw FetchError("The sample needs two Claude accounts") }
+        let (first, second) = (claudes[0], claudes[1])
+        let events: [(start: TimeInterval, plays: [Int: ClawdAnimation])] = [
+            (0.4, [first: .hop]), (1.8, [second: .wave]), (3.4, [first: .backflip]), (5, [second: .dance]),
+            (6.8, [first: .teleport]), (8.4, [second: .spin]), (10, [first: .bigJump, second: .cheer]),
+        ]
+        let length: TimeInterval = 12
+        let first0 = MenuBarImage.render(segments, dark: dark)
+        let padding: CGFloat = 8
+        let size = NSSize(width: first0.size.width + padding * 2, height: first0.size.height + padding)
+        let frames = Int(length * gifFrameRate)
+
+        var applied = 0
+        try writeGIF(size: size, scale: 3, frames: frames, to: path) { frame in
+            let t = Double(frame) / gifFrameRate
+            // Each animation starts as its account's number goes up by one.
+            while applied < events.count, events[applied].start <= t {
+                for index in events[applied].plays.keys {
+                    if case .account(let provider, let text) = segments[index], let value = Int(text.dropLast()) {
+                        segments[index] = .account(provider, "\(value + 1)%")
+                    }
+                }
+                applied += 1
+            }
+            var poses: [Int: ClawdPose] = [:]
+            for event in events where event.start <= t {
+                for (index, animation) in event.plays where t - event.start < animation.duration {
+                    poses[index] = animation.pose(at: t - event.start)
+                }
+            }
+            background(dark).setFill()
+            NSRect(origin: .zero, size: size).fill()
+            MenuBarImage.render(segments, dark: dark, poses: poses)
+                .draw(in: NSRect(origin: NSPoint(x: padding, y: padding / 2), size: first0.size))
+        }
+    }
+
+    /// Every animation at once in a labelled grid, each playing from the start of the loop.
+    static func animationsGIF(to path: String, dark: Bool) throws {
+        let animations = ClawdAnimation.allCases
+        let columns = 7
+        let rows = (animations.count + columns - 1) / columns
+        let tile = NSSize(width: 104, height: 84)
+        let size = NSSize(width: tile.width * CGFloat(columns), height: tile.height * CGFloat(rows))
+        let mascot: [MenuBarSegment] = [.account(.claude, "")]
+        let mascotScale: CGFloat = 1.9
+        let length = (animations.map(\.duration).max() ?? 1) + 0.6
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11),
+            .foregroundColor: dark ? NSColor(white: 0.8, alpha: 1) : NSColor(white: 0.3, alpha: 1),
+        ]
+        try writeGIF(size: size, scale: 2, frames: Int(length * gifFrameRate), to: path) { frame in
+            let t = Double(frame) / gifFrameRate
+            background(dark).setFill()
+            NSRect(origin: .zero, size: size).fill()
+            for (index, animation) in animations.enumerated() {
+                let origin = NSPoint(x: CGFloat(index % columns) * tile.width,
+                                     y: size.height - CGFloat(index / columns + 1) * tile.height)
+                let pose = t < animation.duration ? animation.pose(at: t) : ClawdPose()
+                let image = MenuBarImage.render(mascot, dark: dark, poses: [0: pose])
+                let drawn = NSSize(width: image.size.width * mascotScale, height: image.size.height * mascotScale)
+                image.draw(in: NSRect(x: origin.x + (tile.width - drawn.width) / 2, y: origin.y + 22,
+                                      width: drawn.width, height: drawn.height))
+                let name = animation.name as NSString
+                let nameWidth = name.size(withAttributes: attributes).width
+                name.draw(at: NSPoint(x: origin.x + (tile.width - nameWidth) / 2, y: origin.y + 8), withAttributes: attributes)
+            }
+        }
+    }
+
+    private static func background(_ dark: Bool) -> NSColor {
+        dark ? NSColor(white: 0.12, alpha: 1) : NSColor(white: 0.96, alpha: 1)
+    }
+
+    /// Writes a looping GIF of `frames` frames at `gifFrameRate`, each drawn by `draw(frame)`.
+    private static func writeGIF(size: NSSize, scale: CGFloat, frames: Int, to path: String,
+                                 draw: (Int) -> Void) throws {
+        guard let destination = CGImageDestinationCreateWithURL(
+            URL(fileURLWithPath: path) as CFURL, UTType.gif.identifier as CFString, frames, nil)
+        else { throw FetchError("Could not create GIF") }
+        CGImageDestinationSetProperties(destination, [
+            kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0],
+        ] as CFDictionary)
+        let delay = 1 / gifFrameRate
+        let frameProperties = [
+            kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: delay, kCGImagePropertyGIFUnclampedDelayTime: delay],
+        ] as CFDictionary
+        for frame in 0..<frames {
+            guard let image = bitmap(size: size, scale: scale, draw: { draw(frame) }).cgImage
+            else { throw FetchError("Could not draw a GIF frame") }
+            CGImageDestinationAddImage(destination, image, frameProperties)
+        }
+        guard CGImageDestinationFinalize(destination) else { throw FetchError("Could not write GIF") }
+    }
+
     private static func writePNG(size: NSSize, scale: CGFloat, to path: String, draw: () -> Void) throws {
+        guard let png = bitmap(size: size, scale: scale, draw: draw).representation(using: .png, properties: [:])
+        else { throw FetchError("Could not encode PNG") }
+        try png.write(to: URL(fileURLWithPath: path))
+    }
+
+    private static func bitmap(size: NSSize, scale: CGFloat, draw: () -> Void) -> NSBitmapImageRep {
         let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale),
                                    bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                    colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
@@ -119,7 +235,6 @@ enum DebugRender {
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
         draw()
         NSGraphicsContext.restoreGraphicsState()
-        guard let png = rep.representation(using: .png, properties: [:]) else { throw FetchError("Could not encode PNG") }
-        try png.write(to: URL(fileURLWithPath: path))
+        return rep
     }
 }
