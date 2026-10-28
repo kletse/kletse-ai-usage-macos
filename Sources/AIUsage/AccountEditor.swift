@@ -3,39 +3,17 @@ import SwiftUI
 
 struct AccountEditor: View {
     let store: UsageStore
-    /// Closes the hosting window.
-    let close: () -> Void
+    let saver: AccountsAutosaver
     @State private var rows: [Row] = []
-    @State private var error: String?
-    @State private var loaded = false
-    @State private var originalData: Data?
-    @State private var originalAccounts: [AccountConfig] = []
-    @State private var saving = false
     @State private var selection: UUID?
 
-    private let sampleMode: Bool
-
-    init(store: UsageStore, sampleAccounts: [AccountConfig]? = nil, close: @escaping () -> Void = {}) {
+    init(store: UsageStore, saver: AccountsAutosaver) {
         self.store = store
-        self.close = close
-        sampleMode = sampleAccounts != nil
-        // Load before the first frame so the window doesn't redraw from an empty state as it opens.
-        var accounts = sampleAccounts ?? []
-        var loadError: String?
-        if sampleAccounts == nil {
-            do {
-                accounts = try AppConfig.load()
-                _originalData = State(initialValue: try Data(contentsOf: URL(fileURLWithPath: AppConfig.path)))
-            } catch {
-                loadError = "Could not load accounts: \(error.localizedDescription)"
-            }
-        }
-        let initialRows = accounts.map { Row(account: $0) }
+        self.saver = saver
+        // The saver has already loaded, so the window doesn't redraw from an empty state as it opens.
+        let initialRows = saver.savedAccounts.map { Row(account: $0) }
         _rows = State(initialValue: initialRows)
-        _originalAccounts = State(initialValue: accounts)
         _selection = State(initialValue: initialRows.first?.id)
-        _loaded = State(initialValue: loadError == nil)
-        _error = State(initialValue: loadError)
     }
 
     private struct Row: Identifiable {
@@ -64,7 +42,7 @@ struct AccountEditor: View {
         return result
     }
 
-    private var hasChanges: Bool { rows.map(\.account) != originalAccounts }
+    private var loaded: Bool { saver.loadError == nil }
     private var hasProblems: Bool { rows.contains { problem(for: $0) != nil } }
 
     var body: some View {
@@ -77,7 +55,6 @@ struct AccountEditor: View {
         } detail: {
             detail
                 .frame(minWidth: 480, maxWidth: .infinity, maxHeight: .infinity)
-                .bottomBar { footer }
                 // One surface from the title bar down, instead of a darker strip above the form.
                 .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
                 .hiddenToolbarBackground()
@@ -85,6 +62,10 @@ struct AccountEditor: View {
         .navigationTitle("Accounts")
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 760, minHeight: 560)
+        // Changes save on their own once every account is complete.
+        .onChange(of: rows.map(\.account)) { _, accounts in
+            if !hasProblems { saver.schedule(accounts) }
+        }
     }
 
     // MARK: - Sidebar
@@ -107,7 +88,6 @@ struct AccountEditor: View {
         .listStyle(.sidebar)
         .accessibilityLabel("Accounts")
         .onDeleteCommand { if let selection { remove(selection) } }
-        .disabled(saving)
         .softScrollEdges()
         .bottomBar { sidebarFooter }
     }
@@ -125,7 +105,7 @@ struct AccountEditor: View {
             .fixedSize()
             .help("Add an account")
             .accessibilityLabel("Add account")
-            .disabled(!loaded || saving)
+            .disabled(!loaded)
             Button {
                 if let selection { remove(selection) }
             } label: {
@@ -134,11 +114,17 @@ struct AccountEditor: View {
             .buttonStyle(.borderless)
             .help("Remove the selected account")
             .accessibilityLabel("Remove account")
-            .disabled(selection == nil || saving)
+            .disabled(selection == nil)
             Spacer()
-            Text(rows.count == 1 ? "1 account" : "\(rows.count) accounts")
-                .font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                .lineLimit(1).fixedSize()
+            Group {
+                if hasProblems {
+                    Text("Not saved").help("Fix the highlighted accounts to save your changes.")
+                } else {
+                    Text(rows.count == 1 ? "1 account" : "\(rows.count) accounts")
+                }
+            }
+            .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+            .lineLimit(1).fixedSize()
             Button {
                 NSWorkspace.shared.open(URL(fileURLWithPath: AppConfig.path))
             } label: {
@@ -178,7 +164,7 @@ struct AccountEditor: View {
         if let index = rows.firstIndex(where: { $0.id == selection }) {
             accountDetails($rows[index])
                 .id(rows[index].id)
-        } else if !loaded, let error {
+        } else if let error = saver.loadError {
             ContentUnavailableView {
                 Label("Couldn’t load accounts", systemImage: "exclamationmark.triangle")
             } description: {
@@ -223,7 +209,7 @@ struct AccountEditor: View {
                 .padding(.vertical, 4)
             }
 
-            if let error {
+            if let error = saver.error {
                 SwiftUI.Section {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.red).textSelection(.enabled)
@@ -283,7 +269,6 @@ struct AccountEditor: View {
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .softScrollEdges()
-        .disabled(saving)
     }
 
     /// The account's result from the last refresh; edits that change its name or folder clear it.
@@ -300,7 +285,7 @@ struct AccountEditor: View {
                 } else if let error = state?.error {
                     Text(error)
                 } else {
-                    Text(originalAccounts.contains(account) ? "Not checked yet" : "Checked after you save")
+                    Text(saver.savedAccounts.contains(account) ? "Not checked yet" : "Not saved yet")
                 }
             }
             .font(.callout).foregroundStyle(.secondary)
@@ -312,33 +297,6 @@ struct AccountEditor: View {
     private func footnote(_ text: String) -> some View {
         Text(text).font(.callout).foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    // MARK: - Footer
-
-    private var footer: some View {
-        HStack(spacing: 10) {
-            Spacer()
-            Group {
-                if store.isRefreshing {
-                    ProgressView().controlSize(.mini)
-                    Text("Waiting for the current refresh…")
-                } else if hasProblems {
-                    Text("Fix the highlighted accounts to save.")
-                } else if hasChanges {
-                    Text("Unsaved changes")
-                }
-            }
-            .font(.callout).foregroundStyle(.secondary)
-            Button("Cancel") { close() }
-                .keyboardShortcut(.cancelAction)
-            Button(saving ? "Saving…" : "Save") { save() }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
-                .disabled(!loaded || saving || store.isRefreshing || !hasChanges || hasProblems)
-        }
-        .controlSize(.large)
-        .padding(.horizontal, 16).padding(.vertical, 12)
     }
 
     // MARK: - Editing
@@ -404,22 +362,68 @@ struct AccountEditor: View {
         rows.remove(at: index)
         selection = rows.isEmpty ? nil : rows[min(index, rows.count - 1)].id
     }
+}
 
-    private func save() {
-        guard !sampleMode else { return }
+/// Writes the Accounts window's edits to the config shortly after they stop, then refreshes
+/// usage. Owned by the window rather than the view, so a pending write still lands on close.
+@MainActor
+@Observable
+final class AccountsAutosaver {
+    /// What the config file holds as far as this window knows.
+    private(set) var savedAccounts: [AccountConfig] = []
+    private(set) var loadError: String?
+    private(set) var error: String?
+
+    @ObservationIgnored private let store: UsageStore
+    /// Sample savers render previews and never touch the config.
+    @ObservationIgnored private let writes: Bool
+    @ObservationIgnored private var savedData: Data?
+    @ObservationIgnored private var pending: [AccountConfig]?
+    @ObservationIgnored private var delay: Task<Void, Never>?
+
+    init(store: UsageStore, sampleAccounts: [AccountConfig]? = nil) {
+        self.store = store
+        writes = sampleAccounts == nil
+        if let sampleAccounts {
+            savedAccounts = sampleAccounts
+            return
+        }
         do {
-            let current = try Data(contentsOf: URL(fileURLWithPath: AppConfig.path))
-            guard current == originalData else {
-                error = "The config changed outside this window. Close and reopen Accounts to load those changes."
+            savedAccounts = try AppConfig.load()
+            savedData = try Data(contentsOf: URL(fileURLWithPath: AppConfig.path))
+        } catch {
+            loadError = "Could not load accounts: \(error.localizedDescription)"
+        }
+    }
+
+    /// Saves after a short pause, so typing a path doesn't refresh against every partial folder.
+    func schedule(_ accounts: [AccountConfig]) {
+        pending = accounts
+        delay?.cancel()
+        delay = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(800))
+            guard !Task.isCancelled else { return }
+            self?.flush()
+        }
+    }
+
+    /// Writes any pending change now.
+    func flush() {
+        delay?.cancel()
+        guard let accounts = pending else { return }
+        pending = nil
+        guard writes, loadError == nil, accounts != savedAccounts else { return }
+        do {
+            let url = URL(fileURLWithPath: AppConfig.path)
+            guard try Data(contentsOf: url) == savedData else {
+                error = "The config changed outside this window, so these edits weren’t saved. Close and reopen Accounts to load those changes."
                 return
             }
-            try AppConfig.save(rows.map(\.account))
-            saving = true
-            Task {
-                await store.refresh()
-                saving = false
-                close()
-            }
+            try AppConfig.save(accounts)
+            savedData = try Data(contentsOf: url)
+            savedAccounts = accounts
+            error = nil
+            Task { await store.refresh() }
         } catch {
             self.error = (error as? FetchError)?.description ?? error.localizedDescription
         }

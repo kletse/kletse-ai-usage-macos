@@ -56,8 +56,9 @@ xattr -dr com.apple.quarantine ~/Applications/AIUsage.app
 
 ## Configure your accounts
 
-Use the gear button in the menu bar panel to add, edit, or remove accounts. Save applies the
-changes and refreshes usage. You can also edit the JSON file directly.
+Use the gear button in the menu bar panel to add, edit, or remove accounts. Changes save
+automatically once every account has a name and login directory, and usage refreshes. You can
+also edit the JSON file directly.
 
 On first run the app creates `~/.config/ai-usage/accounts.json`. Edit it to match your logins;
 changes are picked up on the next refresh (every 5 minutes, or click ↻). Initial accounts are

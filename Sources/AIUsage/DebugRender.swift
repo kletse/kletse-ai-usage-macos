@@ -87,7 +87,7 @@ enum DebugRender {
     /// Synthetic editor preview; never loads or saves the live configuration.
     static func accounts(to path: String, dark: Bool) throws {
         let store = sampleStore()
-        let content = AccountEditor(store: store, sampleAccounts: store.accounts)
+        let content = AccountEditor(store: store, saver: AccountsAutosaver(store: store, sampleAccounts: store.accounts))
             .frame(width: 840, height: 680)
             .background(Color(nsColor: .windowBackgroundColor))
             .environment(\.colorScheme, dark ? .dark : .light)

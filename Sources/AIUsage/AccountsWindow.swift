@@ -7,6 +7,7 @@ import SwiftUI
 @MainActor
 final class AccountsWindowController: NSWindowController, NSWindowDelegate {
     private static var shared: AccountsWindowController?
+    private let saver: AccountsAutosaver
 
     static func show(store: UsageStore) {
         let controller = shared ?? AccountsWindowController(store: store)
@@ -22,6 +23,7 @@ final class AccountsWindowController: NSWindowController, NSWindowDelegate {
             contentRect: NSRect(x: 0, y: 0, width: 840, height: 640),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false)
+        saver = AccountsAutosaver(store: store)
         super.init(window: window)
 
         window.title = "Accounts"
@@ -35,9 +37,7 @@ final class AccountsWindowController: NSWindowController, NSWindowDelegate {
         window.minSize = NSSize(width: 760, height: 560)
         window.delegate = self
 
-        let hosting = NSHostingController(rootView: AccountEditor(store: store) { [weak window] in
-            window?.performClose(nil)
-        })
+        let hosting = NSHostingController(rootView: AccountEditor(store: store, saver: saver))
         // The window owns its size; don't let SwiftUI resize it while it opens.
         hosting.sizingOptions = [.minSize]
         window.contentViewController = hosting
@@ -58,6 +58,8 @@ final class AccountsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        // Write the last edit now, so reopening straight away loads it.
+        saver.flush()
         // A fresh editor next time, so it reloads the config.
         Self.shared = nil
     }

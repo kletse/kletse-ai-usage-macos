@@ -22,6 +22,7 @@ final class UsageStore {
     @ObservationIgnored private var wakeObserver: WakeObserver?
     @ObservationIgnored private var cache: SnapshotCache?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
+    @ObservationIgnored private var refreshQueued = false
 
     /// A store with fixed data and no polling, for rendering screenshots.
     init(fixed: [(AccountConfig, UsageSnapshot)]) {
@@ -69,10 +70,18 @@ final class UsageStore {
     }
 
     func refresh() async {
-        guard !isRefreshing else { return }
+        // A refresh asked for mid-run runs again afterwards, so it sees a config saved meanwhile.
+        guard !isRefreshing else { refreshQueued = true; return }
         isRefreshing = true
-        defer { isRefreshing = false; lastRefresh = Date() }
+        defer { isRefreshing = false }
+        repeat {
+            refreshQueued = false
+            await refreshOnce()
+            lastRefresh = Date()
+        } while refreshQueued
+    }
 
+    private func refreshOnce() async {
         // Reload the config each time so edits apply without restarting.
         do {
             let updated = try AppConfig.load()
