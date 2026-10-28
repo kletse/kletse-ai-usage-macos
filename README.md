@@ -45,6 +45,15 @@ scripts/bundle.sh
 `~/Applications`, and starts it. Run it again to update. The app turns on *Open at login* the
 first time it starts; you can switch that off in System Settings → General → Login Items.
 
+The app is ad-hoc signed (no Apple Developer ID), which macOS accepts for an app you built
+locally. A prebuilt copy that arrived another way (downloaded, AirDropped, …) is quarantined, and
+Gatekeeper blocks it as an unidentified developer. Right-click the app and choose *Open* once, or
+clear the quarantine attribute:
+
+```sh
+xattr -dr com.apple.quarantine ~/Applications/AIUsage.app
+```
+
 ## Configure your accounts
 
 On first run the app creates `~/.config/ai-usage/accounts.json`. Edit it to match your logins;
