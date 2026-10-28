@@ -26,7 +26,7 @@ with tempfile.TemporaryDirectory(prefix='ai-usage-privacy-') as directory:
     assert 'Sample data only' in output
     assert 'you@company.com' in output and 'you@example.com' in output
     assert output == run('--dump', '--sample')
-    for command in ('--render-panel', '--render-menubar'):
+    for command in ('--render-panel', '--render-menubar', '--render-accounts'):
         for extra in ([], ['--sample', '--dark']):
             image = root / (command + str(len(extra)) + '.png')
             run(command, str(image), *extra)

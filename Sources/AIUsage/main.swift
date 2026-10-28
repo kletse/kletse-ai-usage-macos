@@ -15,10 +15,13 @@ if !arguments.isEmpty {
     if flags == ["--dump"] {
         DebugRender.dump()
     } else if flags.count == 2,
-              ["--render-panel", "--render-menubar"].contains(flags[0]),
+              ["--render-panel", "--render-menubar", "--render-accounts"].contains(flags[0]),
               !flags[1].hasPrefix("--") {
         do {
-            if flags[0] == "--render-panel" {
+            if flags[0] == "--render-accounts" {
+                _ = NSApplication.shared
+                try DebugRender.accounts(to: flags[1], dark: arguments.contains("--dark"))
+            } else if flags[0] == "--render-panel" {
                 _ = NSApplication.shared
                 try DebugRender.panel(to: flags[1], dark: arguments.contains("--dark"))
             } else {
@@ -30,7 +33,7 @@ if !arguments.isEmpty {
             exit(1)
         }
     } else {
-        print("Usage: AIUsage [--dump | --render-panel FILE | --render-menubar FILE] [--dark] [--sample]")
+        print("Usage: AIUsage [--dump | --render-panel FILE | --render-menubar FILE | --render-accounts FILE] [--dark] [--sample]")
         print("Diagnostic commands always use sample data.")
         exit(2)
     }

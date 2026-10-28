@@ -60,6 +60,21 @@ enum AppConfig {
         return accounts
     }
 
+    static func save(_ accounts: [AccountConfig], to url: URL = URL(fileURLWithPath: path)) throws {
+        for account in accounts {
+            guard !account.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  !account.dir.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw FetchError("Each account needs a name and directory.")
+            }
+        }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        let data = try encoder.encode(accounts)
+        _ = try decode(data)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: url, options: .atomic)
+    }
+
     /// Loads the account list, writing the defaults on first run.
     static func load() throws -> [AccountConfig] {
         let fm = FileManager.default

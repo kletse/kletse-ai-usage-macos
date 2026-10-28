@@ -84,6 +84,32 @@ enum DebugRender {
         try png.write(to: URL(fileURLWithPath: path))
     }
 
+    /// Synthetic editor preview; never loads or saves the live configuration.
+    static func accounts(to path: String, dark: Bool) throws {
+        let store = sampleStore()
+        let content = AccountEditor(store: store, sampleAccounts: store.accounts)
+            .frame(width: 840, height: 680)
+            .background(Color(nsColor: .windowBackgroundColor))
+            .environment(\.colorScheme, dark ? .dark : .light)
+        // Native text fields and scroll views require an AppKit host rather than ImageRenderer.
+        let host = NSHostingView(rootView: content)
+        let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 840, height: 680),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        window.contentView = host
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        host.display()
+        guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)
+        else { throw FetchError("Could not render accounts") }
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        guard let png = bitmap.representation(using: .png, properties: [:])
+        else { throw FetchError("Could not render accounts") }
+        try png.write(to: URL(fileURLWithPath: path))
+    }
+
     /// Template images draw black; fill them with a color for a preview.
     private static func tinted(_ image: NSImage, _ color: NSColor) -> NSImage {
         NSImage(size: image.size, flipped: false) { rect in

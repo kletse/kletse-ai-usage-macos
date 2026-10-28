@@ -56,8 +56,18 @@ xattr -dr com.apple.quarantine ~/Applications/AIUsage.app
 
 ## Configure your accounts
 
+Use the gear button in the menu bar panel to add, edit, or remove accounts. Save applies the
+changes and refreshes usage. You can also edit the JSON file directly.
+
 On first run the app creates `~/.config/ai-usage/accounts.json`. Edit it to match your logins;
-changes are picked up on the next refresh (every 5 minutes, or click ↻).
+changes are picked up on the next refresh (every 5 minutes, or click ↻). Initial accounts are
+discovered from existing `~/.claude` and `~/.codex` directories. If neither exists, the account
+list starts empty.
+
+Usage snapshots are saved to `snapshots.json` beside the config and displayed as cached on
+launch while a fresh request runs. The app also refreshes when the Mac wakes, respecting API
+rate-limit backoff. The cache includes account identity and usage, but no credentials; deleting
+it clears saved usage.
 
 ```json
 [
@@ -129,6 +139,7 @@ python3 tests/check_diagnostics.py                    # verify diagnostic privac
 swift run AIUsage --dump                              # print sample usage as text
 swift run AIUsage --render-panel panel.png --dark     # render a sample dropdown
 swift run AIUsage --render-menubar menubar.png --dark # render a sample menu bar
+swift run AIUsage --render-accounts accounts.png      # render the account editor with sample data
 AI_USAGE_CONFIG=/tmp/test.json swift run AIUsage      # use another config in the live app
 ```
 

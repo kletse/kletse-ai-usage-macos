@@ -1,7 +1,7 @@
 import Foundation
 
 /// A single limit, e.g. the 5-hour session or the weekly cap.
-struct UsageWindow: Sendable, Identifiable, Hashable {
+struct UsageWindow: Codable, Sendable, Identifiable, Hashable {
     var label: String
     var usedPercent: Double
     var resetsAt: Date?
@@ -17,7 +17,7 @@ struct UsageWindow: Sendable, Identifiable, Hashable {
     var displayUsedPercent: Double { max(0, min(100, usedPercent)) }
 }
 
-struct UsageSnapshot: Sendable {
+struct UsageSnapshot: Codable, Sendable {
     var windows: [UsageWindow]
     /// Who is logged in, e.g. an email address.
     var identity: String?

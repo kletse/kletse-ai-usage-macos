@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 
@@ -18,6 +19,8 @@ final class UsageStore {
     private(set) var lastRefresh: Date?
 
     @ObservationIgnored private var retryAfter: [String: Date] = [:]
+    @ObservationIgnored private var wakeObserver: WakeObserver?
+    @ObservationIgnored private var cache: SnapshotCache?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
 
     /// A store with fixed data and no polling, for rendering screenshots.
@@ -28,8 +31,25 @@ final class UsageStore {
     }
 
     init() {
+        let cache = SnapshotCache(url: URL(fileURLWithPath: AppConfig.directory)
+            .appendingPathComponent("snapshots.json"))
+        self.cache = cache
+        do {
+            accounts = try AppConfig.load()
+            states = cache.load(accounts: accounts).mapValues {
+                AccountState(snapshot: $0)
+            }
+        } catch {
+            configError = "Could not read \(AppConfig.path): \(error.localizedDescription)"
+        }
+        wakeObserver = WakeObserver { [weak self] in
+            Task { @MainActor [weak self] in
+                await self?.refresh()
+            }
+        }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
+                guard self != nil else { return }
                 await self?.refresh()
                 try? await Task.sleep(for: .seconds(Self.refreshInterval))
             }
@@ -55,7 +75,15 @@ final class UsageStore {
 
         // Reload the config each time so edits apply without restarting.
         do {
-            accounts = try AppConfig.load()
+            let updated = try AppConfig.load()
+            let previous = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0) })
+            let unchanged = Set(updated.filter {
+                previous[$0.id]?.provider == $0.provider
+                    && previous[$0.id]?.keychainService == $0.keychainService
+            }.map(\.id))
+            states = states.filter { unchanged.contains($0.key) }
+            retryAfter = retryAfter.filter { unchanged.contains($0.key) }
+            accounts = updated
             configError = nil
         } catch {
             configError = "Could not read \(AppConfig.path): \(error.localizedDescription)"
@@ -96,5 +124,22 @@ final class UsageStore {
         let ids = Set(accounts.map(\.id))
         states = states.filter { ids.contains($0.key) }
         retryAfter = retryAfter.filter { ids.contains($0.key) }
+        // Cache failures must not turn a successful fetch into an account error.
+        try? cache?.save(accounts: accounts, snapshots: states.compactMapValues(\.snapshot))
+    }
+}
+
+/// Owns the observer registration so fixed-data diagnostics never subscribe to wake events.
+private final class WakeObserver {
+    private let token: NSObjectProtocol
+
+    init(onWake: @escaping @Sendable () -> Void) {
+        token = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { _ in onWake() }
+    }
+
+    deinit {
+        NSWorkspace.shared.notificationCenter.removeObserver(token)
     }
 }

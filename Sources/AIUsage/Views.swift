@@ -37,6 +37,10 @@ struct UsagePanel: View {
                 if let error = store.configError {
                     Text(error).font(.callout).foregroundStyle(.red)
                 }
+                if store.accounts.isEmpty && store.configError == nil {
+                    Text("No accounts configured. Open Accounts to add a Claude or Codex login.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
                 ForEach(Array(store.accounts.enumerated()), id: \.element.id) { index, account in
                     if let group = account.group, index == 0 || store.accounts[index - 1].group != group {
                         Text(group.uppercased())
@@ -86,6 +90,14 @@ struct UsagePanel: View {
             .buttonStyle(.plain)
             .help("Refresh now")
             .disabled(store.isRefreshing)
+            Button {
+                AccountsWindowController.show(store: store)
+            } label: {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(.plain)
+            .help("Edit accounts")
+            .accessibilityLabel("Edit accounts")
             Button {
                 NSApplication.shared.terminate(nil)
             } label: {
@@ -147,17 +159,17 @@ struct AccountCard: View {
 
 struct ProviderIconView: View {
     let provider: Provider
-    private static let height: CGFloat = 14
+    var height: CGFloat = 14
     private static let claudeOrange = Color(red: 0.85, green: 0.47, blue: 0.34)
 
     var body: some View {
-        let size = ProviderIcon.size(for: provider, height: Self.height)
-        Image(nsImage: ProviderIcon.image(for: provider, height: Self.height))
+        let size = ProviderIcon.size(for: provider, height: height)
+        Image(nsImage: ProviderIcon.image(for: provider, height: height))
             .renderingMode(.template)
             .foregroundStyle(provider == .claude ? Self.claudeOrange : Color.primary)
             .frame(width: size.width, height: size.height)
             // Same slot width for every provider so account names line up.
-            .frame(width: ProviderIcon.size(for: .claude, height: Self.height).width)
+            .frame(width: ProviderIcon.size(for: .claude, height: height).width)
     }
 }
 
