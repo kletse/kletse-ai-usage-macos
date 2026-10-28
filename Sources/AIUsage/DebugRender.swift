@@ -51,14 +51,13 @@ enum DebugRender {
 
     /// Writes the menu bar item at 4x, using the sample accounts.
     static func menuBar(to path: String, dark: Bool) throws {
-        let image = MenuBarImage.render(sampleStore().menuBarSegments)
+        let image = MenuBarImage.render(sampleStore().menuBarSegments, dark: dark)
         let padding: CGFloat = 8
         let size = NSSize(width: image.size.width + padding * 2, height: image.size.height + padding)
         try writePNG(size: size, scale: 4, to: path) {
             (dark ? NSColor(white: 0.12, alpha: 1) : NSColor(white: 0.96, alpha: 1)).setFill()
             NSBezierPath(roundedRect: NSRect(origin: .zero, size: size), xRadius: 6, yRadius: 6).fill()
-            tinted(image, dark ? .white : .black)
-                .draw(in: NSRect(origin: NSPoint(x: padding, y: padding / 2), size: image.size))
+            image.draw(in: NSRect(origin: NSPoint(x: padding, y: padding / 2), size: image.size))
         }
     }
 
@@ -111,15 +110,6 @@ enum DebugRender {
     }
 
     /// Template images draw black; fill them with a color for a preview.
-    private static func tinted(_ image: NSImage, _ color: NSColor) -> NSImage {
-        NSImage(size: image.size, flipped: false) { rect in
-            image.draw(in: rect)
-            color.setFill()
-            rect.fill(using: .sourceAtop)
-            return true
-        }
-    }
-
     private static func writePNG(size: NSSize, scale: CGFloat, to path: String, draw: () -> Void) throws {
         let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale),
                                    bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,

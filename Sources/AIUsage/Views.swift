@@ -18,10 +18,20 @@ struct AIUsageApp: App {
             } else if store.accounts.isEmpty {
                 Text("AI …")
             } else {
-                Image(nsImage: MenuBarImage.render(store.menuBarSegments))
+                MenuBarLabel(segments: store.menuBarSegments)
             }
         }
         .menuBarExtraStyle(.window)
+    }
+}
+
+/// The status item's colour scheme follows the menu bar, which can differ from the system's.
+private struct MenuBarLabel: View {
+    let segments: [MenuBarSegment]
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Image(nsImage: MenuBarImage.render(segments, dark: colorScheme == .dark))
     }
 }
 
@@ -162,7 +172,7 @@ struct AccountCard: View {
 struct ProviderIconView: View {
     let provider: Provider
     var height: CGFloat = 14
-    private static let claudeOrange = Color(red: 0.85, green: 0.47, blue: 0.34)
+    private static let claudeOrange = Color(nsColor: ProviderIcon.claudeOrange)
 
     var body: some View {
         let size = ProviderIcon.size(for: provider, height: height)

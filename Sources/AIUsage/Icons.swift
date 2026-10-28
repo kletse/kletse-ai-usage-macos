@@ -1,6 +1,9 @@
 import AppKit
 
 enum ProviderIcon {
+    /// The mascot's orange in Claude Code.
+    static let claudeOrange = NSColor(srgbRed: 0.85, green: 0.47, blue: 0.34, alpha: 1)
+
     /// Returns a template image of the provider's logo whose visible glyph is `height` points tall.
     static func image(for provider: Provider, height: CGFloat) -> NSImage {
         switch provider {
@@ -79,11 +82,12 @@ enum MenuBarSegment: Hashable {
 }
 
 enum MenuBarImage {
-    /// Renders the whole menu bar label as one template image, so the icons and text
-    /// follow the menu bar's light/dark appearance like other status items.
-    static func render(_ segments: [MenuBarSegment]) -> NSImage {
+    /// Renders the whole menu bar label as one image: the Claude mascot in its orange, the rest
+    /// in the text colour of a `dark` or light menu bar. A template image can't keep the orange.
+    static func render(_ segments: [MenuBarSegment], dark: Bool) -> NSImage {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.labelColor]
+        let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
         let height: CGFloat = 18
         let iconHeight: CGFloat = 11
         let iconGap: CGFloat = 2
@@ -101,28 +105,39 @@ enum MenuBarImage {
 
         let total = segments.map(width).reduce(0, +) + itemGap * CGFloat(max(0, segments.count - 1))
         let image = NSImage(size: NSSize(width: max(1, ceil(total)), height: height), flipped: false) { _ in
-            var x: CGFloat = 0
-            for segment in segments {
-                switch segment {
-                case .account(let provider, let text):
-                    let iconSize = ProviderIcon.size(for: provider, height: iconHeight)
-                    let iconY = (height - iconSize.height) / 2
-                    ProviderIcon.image(for: provider, height: iconHeight)
-                        .draw(in: NSRect(origin: NSPoint(x: x, y: iconY), size: iconSize))
-                    x += iconSize.width + iconGap
-                    let textSize = (text as NSString).size(withAttributes: attributes)
-                    (text as NSString).draw(at: NSPoint(x: x, y: (height - textSize.height) / 2), withAttributes: attributes)
-                    x += textSize.width
-                case .separator:
-                    NSColor.black.setFill()
-                    NSBezierPath(ovalIn: NSRect(x: x, y: (height - dotSize) / 2, width: dotSize, height: dotSize)).fill()
-                    x += dotSize
+            appearance.performAsCurrentDrawingAppearance {
+                var x: CGFloat = 0
+                for segment in segments {
+                    switch segment {
+                    case .account(let provider, let text):
+                        let iconSize = ProviderIcon.size(for: provider, height: iconHeight)
+                        let iconY = (height - iconSize.height) / 2
+                        let color = provider == .claude ? ProviderIcon.claudeOrange : NSColor.labelColor
+                        tinted(ProviderIcon.image(for: provider, height: iconHeight), color)
+                            .draw(in: NSRect(origin: NSPoint(x: x, y: iconY), size: iconSize))
+                        x += iconSize.width + iconGap
+                        let textSize = (text as NSString).size(withAttributes: attributes)
+                        (text as NSString).draw(at: NSPoint(x: x, y: (height - textSize.height) / 2), withAttributes: attributes)
+                        x += textSize.width
+                    case .separator:
+                        NSColor.labelColor.setFill()
+                        NSBezierPath(ovalIn: NSRect(x: x, y: (height - dotSize) / 2, width: dotSize, height: dotSize)).fill()
+                        x += dotSize
+                    }
+                    x += itemGap
                 }
-                x += itemGap
             }
             return true
         }
-        image.isTemplate = true
         return image
+    }
+
+    private static func tinted(_ image: NSImage, _ color: NSColor) -> NSImage {
+        NSImage(size: image.size, flipped: false) { rect in
+            image.draw(in: rect)
+            color.setFill()
+            rect.fill(using: .sourceAtop)
+            return true
+        }
     }
 }
