@@ -91,6 +91,8 @@ struct UsagePanel: View {
             .help("Refresh now")
             .disabled(store.isRefreshing)
             Button {
+                // The click came from the dropdown, so it is the key window; close it like a menu.
+                NSApp.keyWindow?.close()
                 AccountsWindowController.show(store: store)
             } label: {
                 Image(systemName: "gearshape")
