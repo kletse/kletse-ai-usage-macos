@@ -6,6 +6,13 @@ struct AccountEditor: View {
     let saver: AccountsAutosaver
     @State private var rows: [Row] = []
     @State private var selection: UUID?
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var showingAnimations = false
+    @AppStorage(MenuBarSettings.colorKey) private var colorIcon = true
+    @AppStorage(MenuBarSettings.animateKey) private var animate = true
+
+    /// The sidebar tag of the Menu Bar page, alongside the account rows' IDs.
+    private static let menuBarPage = UUID()
 
     init(store: UsageStore, saver: AccountsAutosaver) {
         self.store = store
@@ -62,6 +69,7 @@ struct AccountEditor: View {
         .navigationTitle("Accounts")
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 760, minHeight: 560)
+        .sheet(isPresented: $showingAnimations) { AnimationGallery(store: store) }
         // Changes save on their own once every account is complete.
         .onChange(of: rows.map(\.account)) { _, accounts in
             if !hasProblems { saver.schedule(accounts) }
@@ -72,6 +80,9 @@ struct AccountEditor: View {
 
     private var sidebar: some View {
         List(selection: $selection) {
+            Label("Menu Bar", systemImage: "menubar.rectangle")
+                .padding(.vertical, 3)
+                .tag(Self.menuBarPage)
             ForEach(sections) { section in
                 SwiftUI.Section {
                     ForEach(section.rows) { row in
@@ -114,7 +125,7 @@ struct AccountEditor: View {
             .buttonStyle(.borderless)
             .help("Remove the selected account")
             .accessibilityLabel("Remove account")
-            .disabled(selection == nil)
+            .disabled(selection == nil || selection == Self.menuBarPage)
             Spacer()
             Group {
                 if hasProblems {
@@ -161,7 +172,9 @@ struct AccountEditor: View {
 
     @ViewBuilder
     private var detail: some View {
-        if let index = rows.firstIndex(where: { $0.id == selection }) {
+        if selection == Self.menuBarPage {
+            menuBarSettings
+        } else if let index = rows.firstIndex(where: { $0.id == selection }) {
             accountDetails($rows[index])
                 .id(rows[index].id)
         } else if let error = saver.loadError {
@@ -271,6 +284,46 @@ struct AccountEditor: View {
         .softScrollEdges()
     }
 
+    private var menuBarSettings: some View {
+        Form {
+            SwiftUI.Section {
+                VStack(spacing: 10) {
+                    Image(nsImage: MenuBarImage.render(store.menuBarSegments, dark: colorScheme == .dark,
+                                                       colorClaude: colorIcon))
+                        .padding(.horizontal, 14).padding(.vertical, 6)
+                        .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    Text("Menu Bar").font(.title3.weight(.semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+            }
+
+            SwiftUI.Section {
+                Picker("Claude icon", selection: $colorIcon) {
+                    Text("Color").tag(true)
+                    Text("Black & White").tag(false)
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
+            } footer: {
+                footnote("Black & white matches the other icons in the menu bar.")
+            }
+
+            SwiftUI.Section {
+                Toggle("Animate the Claude icon", isOn: $animate)
+                LabeledContent("Animations") {
+                    Button("Try Them…") { showingAnimations = true }
+                        .disabled(!store.accounts.contains { $0.provider == .claude })
+                }
+            } footer: {
+                footnote("A mascot plays a random animation when its usage changes, and about every ten minutes one plays one just because. Reduce Motion in System Settings also stops them.")
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .softScrollEdges()
+    }
+
     /// The account's result from the last refresh; edits that change its name or folder clear it.
     @ViewBuilder
     private func status(for account: AccountConfig) -> some View {
@@ -296,6 +349,7 @@ struct AccountEditor: View {
 
     private func footnote(_ text: String) -> some View {
         Text(text).font(.callout).foregroundStyle(.secondary)
+            .multilineTextAlignment(.leading)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 

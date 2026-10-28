@@ -60,6 +60,10 @@ Use the gear button in the menu bar panel to add, edit, or remove accounts. Chan
 automatically once every account has a name and login directory, and usage refreshes. You can
 also edit the JSON file directly.
 
+The Menu Bar page in the same window switches the Claude mascot between color and black and white,
+and turns its animations on or off. Mascots play a random animation when their usage changes, and
+one plays one about every ten minutes; Try Them… previews each animation.
+
 On first run the app creates `~/.config/ai-usage/accounts.json`. Edit it to match your logins;
 changes are picked up on the next refresh (every 5 minutes, or click ↻). Initial accounts are
 discovered from existing `~/.claude` and `~/.codex` directories. If neither exists, the account

@@ -2,6 +2,13 @@ import AppKit
 import Foundation
 import Observation
 
+/// A request to play a mascot animation in the menu bar; each one is distinct, so repeats replay.
+struct AnimationPreview: Equatable {
+    let id = UUID()
+    /// Nil picks a different one for each mascot, as a usage change does.
+    let animation: ClawdAnimation?
+}
+
 struct AccountState: Sendable {
     var snapshot: UsageSnapshot?
     var error: String?
@@ -17,6 +24,8 @@ final class UsageStore {
     private(set) var configError: String?
     private(set) var isRefreshing = false
     private(set) var lastRefresh: Date?
+    /// The latest animation preview asked for in the Accounts window.
+    private(set) var animationPreview: AnimationPreview?
 
     @ObservationIgnored private var retryAfter: [String: Date] = [:]
     @ObservationIgnored private var wakeObserver: WakeObserver?
@@ -55,6 +64,11 @@ final class UsageStore {
                 try? await Task.sleep(for: .seconds(Self.refreshInterval))
             }
         }
+    }
+
+    /// Plays `animation` on every Claude mascot in the menu bar, or a random one on each.
+    func previewAnimation(_ animation: ClawdAnimation?) {
+        animationPreview = AnimationPreview(animation: animation)
     }
 
     /// Menu bar content in config order: a provider icon plus the used percentage of the

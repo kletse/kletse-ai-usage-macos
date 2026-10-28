@@ -18,7 +18,7 @@ struct AIUsageApp: App {
             } else if store.accounts.isEmpty {
                 Text("AI …")
             } else {
-                MenuBarLabel(segments: store.menuBarSegments)
+                MenuBarLabel(segments: store.menuBarSegments, preview: store.animationPreview)
             }
         }
         .menuBarExtraStyle(.window)
@@ -26,12 +26,85 @@ struct AIUsageApp: App {
 }
 
 /// The status item's colour scheme follows the menu bar, which can differ from the system's.
+/// Claude mascots play an animation when their usage changes, and previews from the Accounts window.
 private struct MenuBarLabel: View {
     let segments: [MenuBarSegment]
+    let preview: AnimationPreview?
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage(MenuBarSettings.colorKey) private var colorIcon = true
+    @AppStorage(MenuBarSettings.animateKey) private var animate = true
+    /// What each animating mascot, by segment index, is playing and since when.
+    @State private var playing: [Int: (animation: ClawdAnimation, start: Date)] = [:]
+    @State private var now = Date()
+    @State private var ticker: Task<Void, Never>?
+    /// `segments` as of now, for the long-running fidget loop, which would otherwise keep the first.
+    @State private var current: [MenuBarSegment] = []
 
     var body: some View {
-        Image(nsImage: MenuBarImage.render(segments, dark: colorScheme == .dark))
+        Image(nsImage: MenuBarImage.render(segments, dark: colorScheme == .dark, poses: poses, colorClaude: colorIcon))
+            .onChange(of: segments) { old, new in
+                current = new
+                animate(changedFrom: old, to: new)
+            }
+            .task {
+                current = segments
+                await fidget()
+            }
+            .onChange(of: preview) { _, preview in
+                // A preview was asked for, so it plays even with animations or Reduce Motion off.
+                guard let preview else { return }
+                let claudes = segments.indices.filter { isClaude(segments[$0]) }
+                play(preview.animation.map { animation in
+                    Dictionary(uniqueKeysWithValues: claudes.map { ($0, animation) })
+                } ?? ClawdAnimation.assign(to: claudes))
+            }
+    }
+
+    private var poses: [Int: ClawdPose] {
+        playing.mapValues { $0.animation.pose(at: now.timeIntervalSince($0.start)) }
+    }
+
+    private func isClaude(_ segment: MenuBarSegment) -> Bool {
+        if case .account(.claude, _) = segment { true } else { false }
+    }
+
+    private func animate(changedFrom old: [MenuBarSegment], to new: [MenuBarSegment]) {
+        // Indexes only line up while the account list is the same length.
+        guard animate, old.count == new.count, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        let changed = new.indices.filter { index in
+            guard case .account(.claude, let text) = new[index], case .account(.claude, let previous) = old[index]
+            else { return false }
+            return text != previous && text != "–"
+        }
+        play(ClawdAnimation.assign(to: changed))
+    }
+
+    /// About every ten minutes, one mascot picked at random animates for no reason.
+    private func fidget() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(.random(in: 7 * 60...13 * 60)))
+            let claudes = current.indices.filter { isClaude(current[$0]) }
+            guard animate, playing.isEmpty, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+                  let index = claudes.randomElement(), let animation = ClawdAnimation.allCases.randomElement()
+            else { continue }
+            play([index: animation])
+        }
+    }
+
+    private func play(_ animations: [Int: ClawdAnimation]) {
+        guard !animations.isEmpty else { return }
+        let start = Date()
+        for (index, animation) in animations { playing[index] = (animation, start) }
+        now = start
+        guard ticker == nil else { return }
+        ticker = Task {
+            while !playing.isEmpty {
+                try? await Task.sleep(for: .milliseconds(33))
+                now = Date()
+                playing = playing.filter { now.timeIntervalSince($0.value.start) < $0.value.animation.duration }
+            }
+            ticker = nil
+        }
     }
 }
 
@@ -179,6 +252,13 @@ struct ProviderIconView: View {
         Image(nsImage: ProviderIcon.image(for: provider, height: height))
             .renderingMode(.template)
             .foregroundStyle(provider == .claude ? Self.claudeOrange : Color.primary)
+            .background {
+                if provider == .claude {
+                    Image(nsImage: ProviderIcon.clawdEyes(height: height))
+                        .renderingMode(.template)
+                        .foregroundStyle(.black)
+                }
+            }
             .frame(width: size.width, height: size.height)
             // Same slot width for every provider so account names line up.
             .frame(width: ProviderIcon.size(for: .claude, height: height).width)

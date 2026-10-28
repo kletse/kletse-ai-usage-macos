@@ -5,9 +5,10 @@ enum ProviderIcon {
     static let claudeOrange = NSColor(srgbRed: 0.85, green: 0.47, blue: 0.34, alpha: 1)
 
     /// Returns a template image of the provider's logo whose visible glyph is `height` points tall.
-    static func image(for provider: Provider, height: CGFloat) -> NSImage {
+    /// `pose` moves the Claude mascot's eyes, arms and legs.
+    static func image(for provider: Provider, height: CGFloat, pose: ClawdPose = ClawdPose()) -> NSImage {
         switch provider {
-        case .claude: clawd(height: height)
+        case .claude: clawd(height: height, pose: pose)
         case .codex: codex(height: height)
         }
     }
@@ -34,14 +35,59 @@ enum ProviderIcon {
     private static let clawdPixelAspect: CGFloat = 1.8
     private static let clawdAspect: CGFloat = 16 / (5 * clawdPixelAspect)
 
-    private static func clawd(height: CGFloat) -> NSImage {
+    /// The grid for `pose`: eyes are the gaps in the second row, arms the two pixels either side
+    /// of the third, and legs the bottom row.
+    private static func clawdPixels(_ pose: ClawdPose) -> [[Int]] {
+        var rows = clawdRows
+        let eyes = eyeColumns(pose)
+        rows[1] = Array(2...13).filter { !eyes.contains($0) }
+        for (arm, columns, outer) in [(pose.leftArm, [0, 1], 0), (pose.rightArm, [14, 15], 15)] {
+            switch arm {
+            case .down: continue
+            case .raised: rows[1] += columns
+            // Straight up along the outer column, apart from the body so it doesn't read as a hat.
+            case .high: rows[0].append(outer); rows[1].append(outer)
+            }
+            rows[2].removeAll { columns.contains($0) }
+        }
+        switch pose.legs {
+        case .standing: break
+        case .stepLeft: rows[4] = [3, 10]
+        case .stepRight: rows[4] = [5, 12]
+        case .tucked: rows[4] = []
+        case .wide: rows[4] = [2, 13]
+        }
+        return rows
+    }
+
+    private static func eyeColumns(_ pose: ClawdPose) -> [Int] {
+        switch pose.eyes {
+        case .open: [4, 11]
+        case .closed: []
+        case .left: [3, 10]
+        case .right: [5, 12]
+        case .wide: [4, 5, 10, 11]
+        case .wink: [4]
+        }
+    }
+
+    private static func clawd(height: CGFloat, pose: ClawdPose) -> NSImage {
+        pixelImage(clawdPixels(pose), height: height)
+    }
+
+    /// A template image of just the mascot's eyes, to fill the gaps the body leaves for them.
+    static func clawdEyes(height: CGFloat, pose: ClawdPose = ClawdPose()) -> NSImage {
+        pixelImage([[], eyeColumns(pose), [], [], []], height: height)
+    }
+
+    private static func pixelImage(_ rows: [[Int]], height: CGFloat) -> NSImage {
         let size = size(for: .claude, height: height)
         let image = NSImage(size: size, flipped: true) { _ in
-            let pixelHeight = height / CGFloat(clawdRows.count)
+            let pixelHeight = height / CGFloat(rows.count)
             let pixelWidth = size.width / 16
             // One path so adjacent pixels fill without seams.
             let path = NSBezierPath()
-            for (row, columns) in clawdRows.enumerated() {
+            for (row, columns) in rows.enumerated() {
                 for column in columns {
                     path.appendRect(NSRect(x: CGFloat(column) * pixelWidth, y: CGFloat(row) * pixelHeight,
                                            width: pixelWidth, height: pixelHeight))
@@ -76,6 +122,316 @@ enum ProviderIcon {
     }
 }
 
+/// Menu bar preferences, kept in user defaults.
+enum MenuBarSettings {
+    /// Whether the Claude mascot is orange; on by default.
+    static let colorKey = "menuBarClaudeInColor"
+    /// Whether mascots animate when usage changes; on by default.
+    static let animateKey = "menuBarAnimations"
+}
+
+/// One frame of a Claude mascot animation.
+struct ClawdPose: Equatable {
+    enum Eyes { case open, closed, left, right, wide, wink }
+    enum Arm { case down, raised, high }
+    enum Legs { case standing, stepLeft, stepRight, tucked, wide }
+
+    /// Points above its resting place.
+    var lift: CGFloat = 0
+    /// Points right of its resting place.
+    var shift: CGFloat = 0
+    /// Degrees clockwise, about its centre.
+    var tilt: CGFloat = 0
+    /// Size, about its feet.
+    var scale: CGFloat = 1
+    /// Height on top of `scale`: below 1 squashes, above stretches.
+    var stretch: CGFloat = 1
+    var opacity: CGFloat = 1
+    var eyes = Eyes.open
+    var leftArm = Arm.down
+    var rightArm = Arm.down
+    var legs = Legs.standing
+}
+
+/// The Claude mascot's menu bar animations. A usage change plays a random one.
+enum ClawdAnimation: CaseIterable, Identifiable {
+    case hop, wave, lookAround, dance, shiver, bigJump, cheer, wink
+    case walk, bounce, doze, surprise, flap, stretch, rockOut
+    case spin, curious, boing, pop, scared, teleport, ghost, sneeze, snore, backflip
+    case wobble, jumpingJacks, tapFoot, moonwalk, peekaboo, shy, hiccup, heartbeat, dizzy, swim
+
+    var id: Self { self }
+
+    var name: String {
+        switch self {
+        case .hop: "Hop"
+        case .wave: "Wave"
+        case .lookAround: "Look around"
+        case .dance: "Dance"
+        case .shiver: "Shiver"
+        case .bigJump: "Big jump"
+        case .cheer: "Cheer"
+        case .wink: "Wink"
+        case .walk: "Walk"
+        case .bounce: "Bounce"
+        case .doze: "Doze off"
+        case .surprise: "Surprise"
+        case .flap: "Flap"
+        case .stretch: "Stretch"
+        case .rockOut: "Rock out"
+        case .spin: "Spin"
+        case .curious: "Curious"
+        case .boing: "Boing"
+        case .pop: "Pop"
+        case .scared: "Scared"
+        case .teleport: "Teleport"
+        case .ghost: "Ghost"
+        case .sneeze: "Sneeze"
+        case .snore: "Snore"
+        case .backflip: "Backflip"
+        case .wobble: "Wobble"
+        case .jumpingJacks: "Jumping jacks"
+        case .tapFoot: "Tap foot"
+        case .moonwalk: "Moonwalk"
+        case .peekaboo: "Peekaboo"
+        case .shy: "Shy"
+        case .hiccup: "Hiccup"
+        case .heartbeat: "Heartbeat"
+        case .dizzy: "Dizzy"
+        case .swim: "Swim"
+        }
+    }
+
+    var duration: TimeInterval {
+        switch self {
+        case .pop: 0.7
+        case .shiver: 0.8
+        case .wink, .bounce: 0.9
+        case .hop, .surprise, .spin, .boing: 1
+        case .bigJump, .rockOut, .backflip, .wobble: 1.2
+        case .wave, .cheer, .teleport: 1.3
+        case .dance, .scared, .sneeze, .peekaboo, .heartbeat: 1.4
+        case .lookAround, .flap, .jumpingJacks: 1.5
+        case .walk, .stretch, .curious, .tapFoot, .moonwalk, .shy: 1.6
+        case .ghost, .hiccup, .swim: 1.8
+        case .doze, .dizzy: 2
+        case .snore: 2.4
+        }
+    }
+
+    /// Different animations for each mascot, as long as there are enough to go round.
+    static func assign(to indexes: [Int]) -> [Int: ClawdAnimation] {
+        let shuffled = allCases.shuffled()
+        return Dictionary(uniqueKeysWithValues: indexes.enumerated().map { ($1, shuffled[$0 % shuffled.count]) })
+    }
+
+    func pose(at t: TimeInterval) -> ClawdPose {
+        /// A jump of `height` points from `start` to `start + length`.
+        func arc(_ start: TimeInterval, _ length: TimeInterval, _ height: CGFloat) -> CGFloat {
+            let progress = (t - start) / length
+            return (0...1).contains(progress) ? height * sin(.pi * progress) : 0
+        }
+        func during(_ start: TimeInterval, _ end: TimeInterval) -> Bool { (start..<end).contains(t) }
+        /// Alternates every `period` seconds, starting true.
+        func beat(_ period: TimeInterval) -> Bool { Int(t / period) % 2 == 0 }
+        /// Eases between (time, value) keyframes, holding the first and last values outside them.
+        func keys(_ frames: [(TimeInterval, CGFloat)]) -> CGFloat {
+            guard let next = frames.firstIndex(where: { $0.0 > t }) else { return frames.last?.1 ?? 0 }
+            guard next > 0 else { return frames[0].1 }
+            let (t0, v0) = frames[next - 1], (t1, v1) = frames[next]
+            let progress = (t - t0) / (t1 - t0)
+            return v0 + (v1 - v0) * CGFloat((1 - cos(.pi * progress)) / 2)
+        }
+        func wave(_ period: TimeInterval) -> CGFloat { CGFloat(sin(2 * .pi * t / period)) }
+
+        var pose = ClawdPose()
+        switch self {
+        case .hop:
+            // Two hops, the second smaller, then a blink.
+            pose.lift = arc(0, 0.36, 3) + arc(0.36, 0.26, 1.5)
+            if during(0.08, 0.28) { pose.legs = .tucked }
+            if during(0.75, 0.9) { pose.eyes = .closed }
+        case .wave:
+            if during(0.1, 1.15) { pose.rightArm = beat(0.15) ? .high : .raised }
+            if during(1.15, 1.27) { pose.eyes = .closed }
+        case .lookAround:
+            pose.eyes = during(0.15, 0.6) ? .left : during(0.6, 1.05) ? .right : during(1.2, 1.32) ? .closed : .open
+        case .dance:
+            guard t < 1.4 else { break }
+            pose.legs = beat(0.175) ? .stepLeft : .stepRight
+            pose.lift = beat(0.175) ? 0 : 1
+            pose.shift = beat(0.35) ? -1 : 1
+            pose.leftArm = beat(0.35) ? .raised : .down
+            pose.rightArm = beat(0.35) ? .down : .raised
+        case .shiver:
+            guard t < 0.7 else { break }
+            pose.shift = (beat(0.05) ? 1 : -1) * (t < 0.45 ? 1 : 0.5)
+            pose.eyes = .wide
+        case .bigJump:
+            // Crouch, leap with arms up, land in a crouch.
+            pose.lift = during(0, 0.2) || during(0.75, 0.9) ? -1 : arc(0.2, 0.55, 3.5)
+            if during(0.25, 0.7) { pose.legs = .tucked }
+            if during(0.3, 0.65) { pose.leftArm = .high; pose.rightArm = .high }
+            if during(0.95, 1.07) { pose.eyes = .closed }
+        case .cheer:
+            guard t < 1.1 else { break }
+            pose.leftArm = beat(0.15) ? .high : .raised
+            pose.rightArm = beat(0.15) ? .raised : .high
+            pose.eyes = .closed
+            pose.lift = arc(0, 0.3, 1) + arc(0.3, 0.3, 1) + arc(0.6, 0.3, 1)
+        case .wink:
+            pose.lift = arc(0, 0.25, 1)
+            if during(0.2, 0.7) { pose.eyes = .wink; pose.rightArm = .raised }
+        case .walk:
+            // A few steps left, a look back, and home again.
+            pose.shift = t < 0.7 ? -2 * t / 0.7 : t < 0.9 ? -2 : -2 + 2 * min(1, (t - 0.9) / 0.7)
+            if !during(0.7, 0.9), t < 1.6 { pose.legs = beat(0.12) ? .stepLeft : .stepRight }
+            pose.eyes = t < 0.7 ? .left : t < 0.9 ? .open : .right
+        case .bounce:
+            pose.lift = arc(0, 0.3, 1.5) + arc(0.3, 0.3, 1) + arc(0.6, 0.3, 0.5)
+        case .doze:
+            // Nods off, then wakes with a start.
+            if during(0.2, 1.5) { pose.eyes = .closed }
+            if during(0.5, 1.5) { pose.lift = -0.5 }
+            if during(1.5, 1.9) { pose.eyes = .wide }
+            pose.lift += arc(1.5, 0.3, 2)
+        case .surprise:
+            pose.lift = arc(0, 0.35, 2.5)
+            if during(0, 0.8) { pose.eyes = .wide }
+            if during(0.05, 0.5) { pose.leftArm = .high; pose.rightArm = .high }
+            if during(0.05, 0.3) { pose.legs = .tucked }
+        case .flap:
+            // Flaps up into the air, then drops.
+            if t < 1.2 {
+                pose.leftArm = beat(0.1) ? .raised : .down
+                pose.rightArm = pose.leftArm
+                pose.lift = 2.5 * min(1, t / 0.9)
+                if t > 0.3 { pose.legs = .tucked }
+            } else if t < 1.35 {
+                pose.lift = 2.5 * (1.35 - t) / 0.15
+            }
+        case .stretch:
+            let arm: ClawdPose.Arm = during(0.3, 1.2) ? .high : during(0.1, 1.35) ? .raised : .down
+            pose.leftArm = arm
+            pose.rightArm = arm
+            if during(0.3, 1.2) { pose.lift = 0.5 }
+            if during(0.25, 1.25) { pose.eyes = .closed }
+        case .rockOut:
+            guard t < 1.05 else { break }
+            pose.lift = beat(0.15) ? 0 : -1
+            pose.eyes = .closed
+            pose.rightArm = .high
+        case .spin:
+            // Smaller while turning, so its corners stay inside the menu bar.
+            pose.tilt = keys([(0.1, 0), (0.8, 360)])
+            if during(0.1, 0.8) { pose.scale = 0.8 }
+            pose.lift = arc(0.05, 0.8, 1.5)
+        case .curious:
+            pose.tilt = keys([(0, 0), (0.2, -12), (0.6, -12), (0.8, 0), (1, 12), (1.4, 12), (1.6, 0)])
+            pose.eyes = during(0.15, 0.7) ? .left : during(0.9, 1.45) ? .right : .open
+        case .boing:
+            pose.stretch = keys([(0, 1), (0.15, 0.7), (0.3, 1.25), (0.55, 1.1), (0.7, 0.75), (0.85, 1.08), (1, 1)])
+            pose.lift = arc(0.25, 0.4, 3)
+            if during(0.3, 0.55) { pose.legs = .tucked }
+        case .pop:
+            pose.scale = keys([(0, 1), (0.12, 1.2), (0.3, 0.92), (0.45, 1.05), (0.6, 1)])
+            if during(0.05, 0.4) { pose.eyes = .wide }
+        case .scared:
+            pose.scale = keys([(0, 1), (0.1, 0.65), (1, 0.65), (1.3, 1)])
+            if during(0.1, 1) { pose.shift = beat(0.06) ? 0.5 : -0.5; pose.eyes = .wide }
+        case .teleport:
+            // Beams out as a thin streak and back in, then blinks.
+            pose.opacity = keys([(0, 1), (0.3, 0), (0.6, 0), (0.9, 1)])
+            pose.scale = keys([(0, 1), (0.3, 0.6), (0.6, 0.6), (0.9, 1)])
+            pose.stretch = keys([(0, 1), (0.3, 1.8), (0.6, 1.8), (0.9, 1)])
+            if during(0.95, 1.07) { pose.eyes = .closed }
+        case .ghost:
+            pose.opacity = keys([(0, 1), (0.2, 0.35), (1.5, 0.35), (1.75, 1)])
+            if during(0.2, 1.6) {
+                pose.lift = 1.5 * wave(0.8)
+                pose.leftArm = .raised
+                pose.rightArm = .raised
+                pose.eyes = .wide
+            }
+        case .sneeze:
+            // Leans back as it builds, then lurches forward.
+            pose.tilt = keys([(0, 0), (0.7, -8), (0.78, 10), (1, 0)])
+            pose.stretch = keys([(0, 1), (0.7, 1.12), (0.78, 0.8), (1, 1)])
+            pose.shift = keys([(0, 0), (0.7, -0.5), (0.78, 1), (1, 0)])
+            if during(0.35, 1) { pose.eyes = .closed }
+        case .snore:
+            guard t < 2.2 else { break }
+            pose.eyes = .closed
+            pose.lift = -0.5
+            pose.stretch = 1 - 0.08 * (1 - CGFloat(cos(2 * .pi * t / 1.1))) / 2
+        case .backflip:
+            pose.lift = arc(0.1, 0.8, 3.5)
+            pose.tilt = keys([(0.2, 0), (0.75, -360)])
+            if during(0.2, 0.75) { pose.scale = 0.8 }
+            if during(0.15, 0.8) { pose.legs = .tucked }
+            pose.stretch = keys([(0.85, 1), (0.92, 0.8), (1.05, 1)])
+        case .wobble:
+            pose.tilt = 12 * wave(0.3) * CGFloat(max(0, 1 - t / 1.2))
+        case .jumpingJacks:
+            guard t < 1.5 else { break }
+            let open = t.truncatingRemainder(dividingBy: 0.5) < 0.25
+            if open {
+                pose.leftArm = .high
+                pose.rightArm = .high
+                pose.legs = .wide
+            }
+            pose.lift = arc(0, 0.25, 1) + arc(0.5, 0.25, 1) + arc(1, 0.25, 1)
+        case .tapFoot:
+            guard t < 1.5 else { break }
+            pose.legs = beat(0.1) ? .stepRight : .standing
+            pose.eyes = .left
+            pose.tilt = -3
+        case .moonwalk:
+            // Slides backwards while the legs walk forwards.
+            pose.shift = keys([(0, 0), (1.1, -3), (1.35, -3), (1.6, 0)])
+            if t < 1.1 {
+                pose.legs = beat(0.14) ? .stepLeft : .stepRight
+                pose.eyes = .right
+                pose.tilt = 4
+            }
+        case .peekaboo:
+            pose.lift = keys([(0, 0), (0.15, -2), (0.7, -2), (0.8, 1.5), (1, 0)])
+            pose.stretch = keys([(0, 1), (0.15, 0.75), (0.7, 0.75), (0.8, 1.15), (1, 1)])
+            pose.eyes = during(0.1, 0.72) ? .closed : during(0.72, 1.2) ? .wide : .open
+            if during(0.72, 1.1) { pose.leftArm = .high; pose.rightArm = .high }
+        case .shy:
+            pose.tilt = keys([(0, 0), (0.25, -10), (1.2, -10), (1.5, 0)])
+            pose.scale = keys([(0, 1), (0.25, 0.9), (1.2, 0.9), (1.5, 1)])
+            pose.shift = keys([(0, 0), (0.25, -1), (1.2, -1), (1.5, 0)])
+            pose.eyes = during(0.7, 1) ? .wink : during(0.2, 1.3) ? .left : .open
+        case .hiccup:
+            for start in [0.2, 0.9, 1.35] where during(start, start + 0.3) {
+                pose.lift = arc(start, 0.18, 1.5)
+                pose.eyes = .wide
+                if during(start, start + 0.18) { pose.legs = .tucked }
+            }
+        case .heartbeat:
+            // Lub-dub, twice.
+            pose.scale = 1 + arc(0, 0.14, 0.15) + arc(0.18, 0.14, 0.1) + arc(0.7, 0.14, 0.15) + arc(0.88, 0.14, 0.1)
+        case .dizzy:
+            if t < 1.6 {
+                pose.tilt = 10 * wave(0.6)
+                pose.shift = CGFloat(cos(2 * .pi * t / 0.6))
+                pose.eyes = beat(0.12) ? .left : .right
+            } else {
+                pose.eyes = .closed
+                pose.stretch = keys([(1.6, 1), (1.7, 0.85), (1.9, 1)])
+            }
+        case .swim:
+            pose.lift = arc(0, 1.8, 2.5) + 0.5 * wave(0.45)
+            pose.leftArm = beat(0.225) ? .raised : .down
+            pose.rightArm = pose.leftArm
+            if during(0.2, 1.6) { pose.legs = .tucked }
+        }
+        return pose
+    }
+}
+
 enum MenuBarSegment: Hashable {
     case account(Provider, String)
     case separator
@@ -84,12 +440,18 @@ enum MenuBarSegment: Hashable {
 enum MenuBarImage {
     /// Renders the whole menu bar label as one image: the Claude mascot in its orange, the rest
     /// in the text colour of a `dark` or light menu bar. A template image can't keep the orange.
-    static func render(_ segments: [MenuBarSegment], dark: Bool) -> NSImage {
+    /// `poses` animates the Claude mascots, keyed by segment index; `colorClaude` false draws them
+    /// in the text colour like the other icons.
+    static func render(_ segments: [MenuBarSegment], dark: Bool, poses: [Int: ClawdPose] = [:],
+                       colorClaude: Bool = true) -> NSImage {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
         let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.labelColor]
         let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
-        let height: CGFloat = 18
-        let iconHeight: CGFloat = 11
+        // Taller than the usual 18 points, to leave room above the mascot for its jumps.
+        let height: CGFloat = 22
+        let iconHeight: CGFloat = 13
+        /// Poses are in points for an 11-point mascot; scale them to the size drawn.
+        let motion = iconHeight / 11
         let iconGap: CGFloat = 2
         let itemGap: CGFloat = 5
         let dotSize: CGFloat = 2.5
@@ -103,18 +465,40 @@ enum MenuBarImage {
             }
         }
 
-        let total = segments.map(width).reduce(0, +) + itemGap * CGFloat(max(0, segments.count - 1))
+        // Room for a mascot at the front to move left without being cut off.
+        let inset = 3 * motion
+        let total = inset + segments.map(width).reduce(0, +) + itemGap * CGFloat(max(0, segments.count - 1))
         let image = NSImage(size: NSSize(width: max(1, ceil(total)), height: height), flipped: false) { _ in
             appearance.performAsCurrentDrawingAppearance {
-                var x: CGFloat = 0
-                for segment in segments {
+                var x = inset
+                for (index, segment) in segments.enumerated() {
                     switch segment {
                     case .account(let provider, let text):
                         let iconSize = ProviderIcon.size(for: provider, height: iconHeight)
-                        let iconY = (height - iconSize.height) / 2
-                        let color = provider == .claude ? ProviderIcon.claudeOrange : NSColor.labelColor
-                        tinted(ProviderIcon.image(for: provider, height: iconHeight), color)
-                            .draw(in: NSRect(origin: NSPoint(x: x, y: iconY), size: iconSize))
+                        let pose = poses[index] ?? ClawdPose()
+                        // Whole half-points keep the pixel art crisp on Retina menu bars.
+                        let iconY = (height - iconSize.height) / 2 + (pose.lift * motion * 2).rounded() / 2
+                        let iconX = x + (pose.shift * motion * 2).rounded() / 2
+                        let color = provider == .claude && colorClaude ? ProviderIcon.claudeOrange : NSColor.labelColor
+                        let rect = NSRect(origin: NSPoint(x: iconX, y: iconY), size: iconSize)
+                        NSGraphicsContext.saveGraphicsState()
+                        // Applied last to first: scale about the feet, then turn about the centre.
+                        let transform = NSAffineTransform()
+                        transform.translateX(by: rect.midX, yBy: rect.midY)
+                        transform.rotate(byDegrees: -pose.tilt)
+                        transform.translateX(by: -rect.midX, yBy: -rect.midY)
+                        transform.translateX(by: rect.midX, yBy: rect.minY)
+                        transform.scaleX(by: pose.scale, yBy: pose.scale * pose.stretch)
+                        transform.translateX(by: -rect.midX, yBy: -rect.minY)
+                        transform.concat()
+                        tinted(ProviderIcon.image(for: provider, height: iconHeight, pose: pose), color)
+                            .draw(in: rect, from: .zero, operation: .sourceOver, fraction: pose.opacity)
+                        // Black eyes on the orange mascot; in black and white they stay see-through.
+                        if provider == .claude && colorClaude {
+                            tinted(ProviderIcon.clawdEyes(height: iconHeight, pose: pose), .black)
+                                .draw(in: rect, from: .zero, operation: .sourceOver, fraction: pose.opacity)
+                        }
+                        NSGraphicsContext.restoreGraphicsState()
                         x += iconSize.width + iconGap
                         let textSize = (text as NSString).size(withAttributes: attributes)
                         (text as NSString).draw(at: NSPoint(x: x, y: (height - textSize.height) / 2), withAttributes: attributes)
