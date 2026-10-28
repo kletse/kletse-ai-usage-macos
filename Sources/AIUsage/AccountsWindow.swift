@@ -5,9 +5,8 @@ import SwiftUI
 /// created with `.fullSizeContentView` and a toolbar gets the macOS 26 glass sidebar and title bar,
 /// and showing it directly avoids the scene machinery's extra resize while it animates in.
 @MainActor
-final class AccountsWindowController: NSWindowController, NSWindowDelegate, NSToolbarDelegate {
+final class AccountsWindowController: NSWindowController, NSWindowDelegate {
     private static var shared: AccountsWindowController?
-    nonisolated private static let titleItem = NSToolbarItem.Identifier("title")
     private let saver: AccountsAutosaver
 
     static func show(store: UsageStore) {
@@ -27,17 +26,14 @@ final class AccountsWindowController: NSWindowController, NSWindowDelegate, NSTo
         saver = AccountsAutosaver(store: store)
         super.init(window: window)
 
-        window.title = "Accounts"
+        // Named for the Window menu and Mission Control; each page shows its own heading instead.
+        window.title = "AI Usage Settings"
         window.toolbarStyle = .unified
         window.titlebarSeparatorStyle = .none
         window.titlebarAppearsTransparent = true
-        // The toolbar gives the title bar its unified look over the sidebar and detail. It shows
-        // the title centred in the window; the built-in one sits at the left of the detail column.
         window.titleVisibility = .hidden
-        let toolbar = NSToolbar(identifier: "accounts")
-        toolbar.delegate = self
-        toolbar.centeredItemIdentifiers = [Self.titleItem]
-        window.toolbar = toolbar
+        // An empty toolbar gives the title bar its unified look over the sidebar and detail.
+        window.toolbar = NSToolbar(identifier: "accounts")
         window.isReleasedWhenClosed = false
         window.animationBehavior = .documentWindow
         window.minSize = NSSize(width: 760, height: 560)
@@ -50,27 +46,6 @@ final class AccountsWindowController: NSWindowController, NSWindowDelegate, NSTo
         window.setContentSize(NSSize(width: 840, height: 640))
         if !window.setFrameUsingName("AccountsWindow") { window.center() }
         window.setFrameAutosaveName("AccountsWindow")
-    }
-
-    nonisolated func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.flexibleSpace, Self.titleItem, .flexibleSpace]
-    }
-
-    nonisolated func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        toolbarDefaultItemIdentifiers(toolbar)
-    }
-
-    nonisolated func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier,
-                             willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
-        MainActor.assumeIsolated {
-            guard identifier == Self.titleItem else { return nil }
-            let label = NSTextField(labelWithString: "Accounts")
-            label.font = .titleBarFont(ofSize: 0)
-            let item = NSToolbarItem(itemIdentifier: identifier)
-            item.view = label
-            item.isBordered = false
-            return item
-        }
     }
 
     @available(*, unavailable)

@@ -67,7 +67,7 @@ struct AccountEditor: View {
                 .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
                 .hiddenToolbarBackground()
         }
-        .navigationTitle("Accounts")
+        .navigationTitle("AI Usage Settings")
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 760, minHeight: 560)
         .sheet(isPresented: $showingAnimations) { AnimationGallery(store: store) }
