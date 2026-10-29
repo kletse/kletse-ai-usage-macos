@@ -74,8 +74,10 @@ func labels(seconds: Int, expected: String) {
     #expect(ClaudeProvider(account: account).keychainService == "Claude Code-credentials-0872effe")
     account.dir = "~/.claude"
     #expect(ClaudeProvider(account: account).keychainService == "Claude Code-credentials")
+    #expect(ClaudeProvider(account: account).keychainServices.count == 2)
     account.keychainService = "override"
     #expect(ClaudeProvider(account: account).keychainService == "override")
+    #expect(ClaudeProvider(account: account).keychainServices == ["override"])
 }
 
 @Test func sessionFallback() async throws {

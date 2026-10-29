@@ -15,6 +15,17 @@ struct ClaudeProvider: Sendable {
         if let override = account.keychainService { return override }
         let dir = account.expandedDir
         if dir == Self.defaultDir { return "Claude Code-credentials" }
+        return Self.hashedService(dir)
+    }
+
+    /// `CLAUDE_CONFIG_DIR=~/.claude` is the default dir, but Claude Code still uses the hashed name
+    /// for it, so the default login can live under either. The newest one wins.
+    var keychainServices: [String] {
+        guard account.keychainService == nil, account.expandedDir == Self.defaultDir else { return [keychainService] }
+        return [keychainService, Self.hashedService(Self.defaultDir)]
+    }
+
+    private static func hashedService(_ dir: String) -> String {
         let digest = SHA256.hash(data: Data(dir.utf8))
         let hex = digest.map { String(format: "%02x", $0) }.joined()
         return "Claude Code-credentials-" + hex.prefix(8)
@@ -24,6 +35,12 @@ struct ClaudeProvider: Sendable {
     var stateFile: String {
         let dir = account.expandedDir
         return dir == Self.defaultDir ? expandTilde("~/.claude.json") : dir + "/.claude.json"
+    }
+
+    /// Like `keychainServices`: an explicit `CLAUDE_CONFIG_DIR=~/.claude` uses `~/.claude/.claude.json`.
+    private var stateFiles: [String] {
+        let dir = account.expandedDir
+        return dir == Self.defaultDir ? [stateFile, dir + "/.claude.json"] : [stateFile]
     }
 
     func fetch() async throws -> UsageSnapshot {
@@ -73,18 +90,29 @@ struct ClaudeProvider: Sendable {
     }
 
     private func readCredentials() async throws -> Credentials {
-        var blob = try? await Keychain.readGenericPassword(service: keychainService)
-        if blob == nil {
-            // Some setups store credentials in a file instead of the keychain.
-            blob = try? Data(contentsOf: URL(fileURLWithPath: account.expandedDir + "/.credentials.json"))
+        var found: [Credentials] = []
+        for service in keychainServices {
+            if let blob = try? await Keychain.readGenericPassword(service: service), let credentials = Self.parse(blob) {
+                found.append(credentials)
+            }
         }
-        guard let blob,
-              let json = try? JSONSerialization.jsonObject(with: blob) as? [String: Any],
-              let oauth = json["claudeAiOauth"] as? [String: Any],
-              let token = oauth["accessToken"] as? String, !token.isEmpty
-        else {
+        if found.isEmpty,
+           // Some setups store credentials in a file instead of the keychain.
+           let blob = try? Data(contentsOf: URL(fileURLWithPath: account.expandedDir + "/.credentials.json")),
+           let credentials = Self.parse(blob) {
+            found.append(credentials)
+        }
+        guard let newest = found.max(by: { ($0.expiresAt ?? .distantPast) < ($1.expiresAt ?? .distantPast) }) else {
             throw FetchError("No Claude Code login found (keychain \"\(keychainService)\")")
         }
+        return newest
+    }
+
+    private static func parse(_ blob: Data) -> Credentials? {
+        guard let json = try? JSONSerialization.jsonObject(with: blob) as? [String: Any],
+              let oauth = json["claudeAiOauth"] as? [String: Any],
+              let token = oauth["accessToken"] as? String, !token.isEmpty
+        else { return nil }
         let expiresAt = (oauth["expiresAt"] as? Double).map { Date(timeIntervalSince1970: $0 / 1000) }
         return Credentials(accessToken: token, expiresAt: expiresAt, subscriptionType: oauth["subscriptionType"] as? String)
     }
@@ -99,7 +127,11 @@ struct ClaudeProvider: Sendable {
     }
 
     private func readState() -> State {
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: stateFile)),
+        let modified = { (path: String) in
+            (try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate] as? Date) ?? .distantPast
+        }
+        let path = stateFiles.max { modified($0) < modified($1) } ?? stateFile
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return State() }
 
