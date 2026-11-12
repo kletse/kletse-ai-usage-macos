@@ -77,8 +77,19 @@ struct RoundedWindowCorners: NSViewRepresentable {
             host.layer?.cornerRadius = radius
             host.layer?.cornerCurve = .continuous
             host.layer?.masksToBounds = true
+            roundShadow(of: window)
             fitWindowToPanel(window)
             window.invalidateShadow()
+        }
+
+        /// The window's shadow follows its own corner mask, not what is drawn in it. MenuBarExtra's
+        /// mask is barely rounded, which leaves the corners around the panel unshadowed and so
+        /// lighter than what surrounds them. AppKit has no public way to change the radius.
+        private func roundShadow(of window: NSWindow) {
+            guard window.responds(to: NSSelectorFromString("_setCornerRadius:")),
+                  window.responds(to: NSSelectorFromString("_cornerRadius")),
+                  window.value(forKey: "cornerRadius") as? Double != Double(radius) else { return }
+            window.setValue(radius, forKey: "cornerRadius")
         }
 
         /// A window larger than the panel shows up as a square outline and shadow around the glass.
