@@ -30,5 +30,7 @@ Run the app's real renewal coordinator and subprocess against disposable OAuth f
 then run Swift tests, diagnostic privacy checks, and a release build/install check.
 
 The installed Claude CLI 2.1.325 renewed disposable credentials four minutes before expiry in
-local tests. Actual Anthropic renewal and its granted lifetime remain unverified until the real
-login reaches its renewal window; no claim of extending the final login deadline is made.
+local tests. A live test on 21 November 2026 confirmed renewal at 09:46:56 Brussels time:
+both tokens changed, access expiry advanced to 17:46:55, and the app scheduled its next check
+at 17:42:55. The usage API returned HTTP 200 and the app saved fresh usage. The eight-hour
+access lifetime was observed for this renewal; the final login deadline was not extended.

@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Observation
+import OSLog
 
 /// A request to play a mascot animation in the menu bar; each one is distinct, so repeats replay.
 struct AnimationPreview: Equatable {
@@ -18,6 +19,7 @@ struct AccountState: Sendable {
 @Observable
 final class UsageStore {
     static let refreshInterval: TimeInterval = 5 * 60
+    private static let renewalLog = Logger(subsystem: "be.kletse.ai-usage", category: "claude-renewal")
 
     private(set) var accounts: [AccountConfig] = []
     private(set) var states: [String: AccountState] = [:]
@@ -31,6 +33,8 @@ final class UsageStore {
     @ObservationIgnored private var wakeObserver: WakeObserver?
     @ObservationIgnored private var cache: SnapshotCache?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
+    @ObservationIgnored private var renewalTask: Task<Void, Never>?
+    @ObservationIgnored private let claudeRenewal = ClaudeSessionRenewal()
     @ObservationIgnored private var refreshQueued = false
 
     /// A store with fixed data and no polling, for rendering screenshots.
@@ -110,8 +114,15 @@ final class UsageStore {
             configError = nil
         } catch {
             configError = "Could not read \(AppConfig.path): \(error.localizedDescription)"
+            renewalTask?.cancel()
+            renewalTask = nil
             return
         }
+
+        // Credential maintenance is independent of usage API Retry-After backoff. Every check
+        // rereads the login, so external CLI renewals replace an obsolete scheduled deadline.
+        let renewal = await claudeRenewal.check(accounts: accounts)
+        scheduleRenewal(at: renewal.values.compactMap(\.nextCheck).min())
 
         let now = Date()
         let due = accounts.filter { (retryAfter[$0.id] ?? .distantPast) <= now }
@@ -135,10 +146,10 @@ final class UsageStore {
                 if snapshot.staleReason == nil || (state.snapshot?.fetchedAt ?? .distantPast) <= snapshot.fetchedAt {
                     state.snapshot = snapshot
                 }
-                state.error = snapshot.staleReason
+                state.error = snapshot.staleReason ?? renewal[id]?.error
                 retryAfter[id] = nil
             case .failure(let error):
-                state.error = (error as? FetchError)?.description ?? error.localizedDescription
+                state.error = renewal[id]?.error ?? (error as? FetchError)?.description ?? error.localizedDescription
                 retryAfter[id] = (error as? FetchError)?.retryAfter
             }
             states[id] = state
@@ -149,6 +160,21 @@ final class UsageStore {
         retryAfter = retryAfter.filter { ids.contains($0.key) }
         // Cache failures must not turn a successful fetch into an account error.
         try? cache?.save(accounts: accounts, snapshots: states.compactMapValues(\.snapshot))
+    }
+
+    private func scheduleRenewal(at date: Date?) {
+        renewalTask?.cancel()
+        renewalTask = nil
+        guard let date else { return }
+        Self.renewalLog.info("Scheduled Claude renewal check at: \(date.timeIntervalSince1970, privacy: .public)")
+        renewalTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(max(1, date.timeIntervalSinceNow))) }
+            catch { return }
+            guard !Task.isCancelled else { return }
+            // Clear before refresh so rescheduling doesn't cancel this task's own requests.
+            self?.renewalTask = nil
+            await self?.refresh()
+        }
     }
 }
 

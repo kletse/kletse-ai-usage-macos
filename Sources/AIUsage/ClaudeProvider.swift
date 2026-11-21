@@ -1,8 +1,8 @@
 import CryptoKit
 import Foundation
 
-/// Reads Claude Code's own OAuth login (read-only) and asks the usage endpoint that `/usage` uses.
-/// It never refreshes the token: refreshing rotates the refresh token and would log the CLI out.
+/// Reads Claude Code's own OAuth login and asks the usage endpoint that `/usage` uses.
+/// Credential writes and renewal belong to Claude Code, invoked by ClaudeSessionRenewal.
 struct ClaudeProvider: Sendable {
     let account: AccountConfig
 
@@ -25,7 +25,7 @@ struct ClaudeProvider: Sendable {
         return [keychainService, Self.hashedService(Self.defaultDir)]
     }
 
-    private static func hashedService(_ dir: String) -> String {
+    static func hashedService(_ dir: String) -> String {
         let digest = SHA256.hash(data: Data(dir.utf8))
         let hex = digest.map { String(format: "%02x", $0) }.joined()
         return "Claude Code-credentials-" + hex.prefix(8)
@@ -45,7 +45,7 @@ struct ClaudeProvider: Sendable {
 
     func fetch() async throws -> UsageSnapshot {
         let state = readState()
-        let credentials: Credentials
+        let credentials: ClaudeCredentials
         do {
             credentials = try await readCredentials()
         } catch {
@@ -83,38 +83,24 @@ struct ClaudeProvider: Sendable {
 
     // MARK: - Credentials
 
-    private struct Credentials {
-        var accessToken: String
-        var expiresAt: Date?
-        var subscriptionType: String?
-    }
-
-    private func readCredentials() async throws -> Credentials {
-        var found: [Credentials] = []
+    func readCredentials() async throws -> ClaudeCredentials {
+        var found: [ClaudeCredentials] = []
         for service in keychainServices {
-            if let blob = try? await Keychain.readGenericPassword(service: service), let credentials = Self.parse(blob) {
+            if let blob = try? await Keychain.readGenericPassword(service: service),
+               let credentials = ClaudeCredentials.parse(blob, source: .keychain(service)) {
                 found.append(credentials)
             }
         }
         if found.isEmpty,
            // Some setups store credentials in a file instead of the keychain.
            let blob = try? Data(contentsOf: URL(fileURLWithPath: account.expandedDir + "/.credentials.json")),
-           let credentials = Self.parse(blob) {
+           let credentials = ClaudeCredentials.parse(blob, source: .file) {
             found.append(credentials)
         }
         guard let newest = found.max(by: { ($0.expiresAt ?? .distantPast) < ($1.expiresAt ?? .distantPast) }) else {
             throw FetchError("No Claude Code login found (keychain \"\(keychainService)\")")
         }
         return newest
-    }
-
-    private static func parse(_ blob: Data) -> Credentials? {
-        guard let json = try? JSONSerialization.jsonObject(with: blob) as? [String: Any],
-              let oauth = json["claudeAiOauth"] as? [String: Any],
-              let token = oauth["accessToken"] as? String, !token.isEmpty
-        else { return nil }
-        let expiresAt = (oauth["expiresAt"] as? Double).map { Date(timeIntervalSince1970: $0 / 1000) }
-        return Credentials(accessToken: token, expiresAt: expiresAt, subscriptionType: oauth["subscriptionType"] as? String)
     }
 
     // MARK: - .claude.json (account info and Claude Code's own usage cache)
@@ -165,6 +151,35 @@ struct ClaudeProvider: Sendable {
         case let other?: other.replacingOccurrences(of: "claude_", with: "").capitalized
         case nil: nil
         }
+    }
+}
+
+/// Secrets stay in memory; only expiry dates are used by the scheduler.
+struct ClaudeCredentials: Sendable {
+    enum Source: Sendable, Equatable {
+        case keychain(String)
+        case file
+    }
+
+    var accessToken: String
+    var expiresAt: Date?
+    var subscriptionType: String?
+    var hasRefreshToken: Bool
+    var refreshTokenExpiresAt: Date?
+    var source: Source
+
+    static func parse(_ blob: Data, source: Source) -> ClaudeCredentials? {
+        guard let json = try? JSONSerialization.jsonObject(with: blob) as? [String: Any],
+              let oauth = json["claudeAiOauth"] as? [String: Any],
+              let token = oauth["accessToken"] as? String, !token.isEmpty else { return nil }
+        func date(_ key: String) -> Date? {
+            guard let value = oauth[key] as? Double, value.isFinite, value > 0 else { return nil }
+            return Date(timeIntervalSince1970: value / 1000)
+        }
+        return ClaudeCredentials(accessToken: token, expiresAt: date("expiresAt"),
+                                 subscriptionType: oauth["subscriptionType"] as? String,
+                                 hasRefreshToken: !(oauth["refreshToken"] as? String ?? "").isEmpty,
+                                 refreshTokenExpiresAt: date("refreshTokenExpiresAt"), source: source)
     }
 }
 
