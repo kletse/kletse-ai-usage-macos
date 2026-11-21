@@ -23,8 +23,9 @@ so there's nothing to sign in to.
 - **Colour-coded:** bars turn orange at 75% and red at 90%.
 - **An animated mascot:** each Claude mascot plays one of 35 little animations when its usage
   changes, and now and then for no reason. See [The mascot](#the-mascot).
-- **Read-only and safe:** never writes to the CLIs' files or keychain items and never refreshes
-  their tokens. See [Safety](#safety).
+- **Automatic Claude renewal:** schedules a Claude Code `/usage` call four minutes before token
+  expiry, verifies the saved replacement token, and schedules again from its new expiry.
+  Claude Code owns all credential writes. See [Safety](#safety).
 - **Small and native:** SwiftUI `MenuBarExtra` with a rounded Liquid Glass panel on macOS 26+
   (a translucent material on older versions), no Dock icon, no dependencies, and no Xcode
   project (just SwiftPM).
@@ -134,8 +135,15 @@ in System Settings also stops the animations.
   you.
 - **Enterprise plans** report a monthly spend cap instead of session and weekly windows. The API
   doesn't say when it resets, so the app assumes the 1st of the month (shown as `~`).
-- **When the token has expired**, the app shows the usage Claude Code last cached in its
-  `.claude.json`, marked as cached, until you next use the CLI.
+- **Four minutes before token expiry**, a separate timer runs Claude Code's noninteractive local
+  `/usage` command. The app then rereads the credentials and requires a different access token
+  with a later expiry before confirming renewal and scheduling the next attempt. Normal polls
+  detect renewals made by another CLI session, and waking the Mac rechecks missed deadlines.
+- **If renewal fails**, attempts back off from 30 seconds up to five minutes. CLI exit code zero
+  alone is not considered success. Existing usage and cached data remain available.
+- **Final login expiry** still requires `claude auth login`; automatic renewal cannot extend it.
+  Claude Code must be installed, and arbitrary custom `keychainService` overrides cannot be
+  renewed automatically. This command path was tested with Claude Code 2.1.325.
 
 ### Codex
 
@@ -146,9 +154,12 @@ in System Settings also stops the animations.
 
 ## Safety
 
-- **Read-only.** The app never writes to the CLIs' config files or keychain items.
-- **No token refresh.** Refreshing would rotate the refresh token and could log the CLI out, so
-  the app leaves that to the CLI and picks up the new token on the next poll.
+- **CLI-owned credentials.** The app never directly writes to CLI config files or keychain items
+  or calls the OAuth refresh endpoint. It asks Claude Code to renew its own login, then reads
+  the result. Codex credentials remain read-only.
+- **Bounded local command.** Renewal runs `/usage` without model prompts, tools, hooks, MCP,
+  Chrome, or conversation persistence. Subprocess output is discarded and runtime is bounded.
+  Claude Code may still show its own macOS Keychain permission prompt if access is not granted.
 - **No secrets in output.** Tokens stay in memory. Errors show HTTP status codes, never response
   bodies or tokens.
 - **Gentle on the APIs.** It polls every 5 minutes and backs off when asked to (`429` +
@@ -161,6 +172,8 @@ time, which may break the app until it's updated.
 
 ```sh
 swift build
+swift test
+python3 tests/check_claude_renewal.py                  # disposable OAuth + real installed Claude CLI
 python3 tests/check_diagnostics.py                    # verify diagnostic privacy
 swift run AIUsage --dump                              # print sample usage as text
 swift run AIUsage --render-panel panel.png --dark     # render a sample dropdown
@@ -182,6 +195,7 @@ The screenshots and GIFs in `docs/` contain only sample data.
 | File | Purpose |
 | --- | --- |
 | `Sources/AIUsage/ClaudeProvider.swift` | Claude keychain lookup, usage request, cache fallback |
+| `Sources/AIUsage/ClaudeSessionRenewal.swift` | Expiry scheduling, CLI renewal, credential readback |
 | `Sources/AIUsage/CodexProvider.swift` | Codex `auth.json`, usage request, session-log fallback |
 | `Sources/AIUsage/UsageStore.swift` | Polling, back-off, state per account |
 | `Sources/AIUsage/Views.swift` | Menu bar extra and dropdown UI |
