@@ -245,6 +245,15 @@ struct AccountEditor: View {
                 }
                 .pickerStyle(.segmented)
                 .fixedSize()
+                if account.provider == .claude {
+                    Picker("Usage type", selection: row.account.claudeUsageType) {
+                        Text("Session").tag(ClaudeUsageType.session)
+                        Text("Week").tag(ClaudeUsageType.week)
+                    }
+                    .pickerStyle(.segmented)
+                    .fixedSize()
+                    .help("Choose the usage shown in the menu bar and account headline. Week uses the overall weekly allowance.")
+                }
                 LabeledContent("Login directory") {
                     HStack(spacing: 8) {
                         TextField("Login directory", text: row.account.dir,

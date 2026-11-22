@@ -14,8 +14,9 @@ so there's nothing to sign in to.
 
 ## Features
 
-- **One number per account in the menu bar:** the used percentage of its tightest limit, with a
-  Claude or Codex icon, and a dot between groups of accounts.
+- **One number per account in the menu bar:** Claude's session or overall weekly usage (your
+  choice, defaulting to Session), or Codex's shortest-period limit, with a provider icon and a dot
+  between groups of accounts.
 - **Every limit in the dropdown**, with the time until it resets:
   - **Claude:** 5-hour session, weekly, per-model weekly (e.g. Fable), and the monthly spend
     cap on Enterprise plans.
@@ -63,6 +64,11 @@ Use the gear button in the menu bar panel to add, edit, or remove accounts. Chan
 automatically once every account has a name and login directory, and usage refreshes. You can
 also edit the JSON file directly.
 
+For Claude accounts, **Usage type** below **Provider** chooses **Session** (the default) or
+**Week** for the menu bar percentage and dropdown headline. Week uses the overall weekly
+allowance, not a per-model limit. All limits remain visible in the dropdown. If weekly usage
+is not reported, Week shows a dash. The selection saves automatically for each account.
+
 <p align="center">
   <img src="docs/accounts.png" alt="Accounts window with a sidebar of accounts and the selected account's settings" width="560">
 </p>
@@ -93,6 +99,7 @@ it clears saved usage.
 | `dir` | That login's `CLAUDE_CONFIG_DIR` or `CODEX_HOME`. Use `~/.claude` / `~/.codex` for the default login. |
 | `group` | Optional. Accounts in a group are shown together under a header, with a dot between groups in the menu bar. |
 | `keychainService` | Optional, Claude only. Overrides the keychain item name (see below). |
+| `usageType` | Optional, Claude only. `session` (default) or `week` for the menu bar and dropdown headline. |
 | `short` | Optional legacy label; reserved for compatibility. |
 
 The order of the list is the order in the menu bar and the dropdown. For example, with shell
