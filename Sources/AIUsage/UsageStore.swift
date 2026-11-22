@@ -72,12 +72,12 @@ final class UsageStore {
     }
 
     /// Menu bar content in config order: a provider icon plus the used percentage of the
-    /// shortest-period limit per account, with a dot wherever the group changes.
+    /// selected Claude allowance (shortest-period limit for Codex), with a dot between groups.
     var menuBarSegments: [MenuBarSegment] {
         var segments: [MenuBarSegment] = []
         for (index, account) in accounts.enumerated() {
             if index > 0, account.group != accounts[index - 1].group { segments.append(.separator) }
-            let used = states[account.id]?.snapshot?.headlineWindow?.displayUsedPercent
+            let used = states[account.id]?.snapshot?.headlineWindow(for: account)?.displayUsedPercent
             segments.append(.account(account.provider, used.map { "\(Int($0.rounded()))%" } ?? "–"))
         }
         return segments

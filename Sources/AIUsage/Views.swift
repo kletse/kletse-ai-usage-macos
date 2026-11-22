@@ -210,10 +210,14 @@ struct AccountCard: View {
                     .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + Self.nameCapHeight / 2 }
                 Text(account.name).font(.body.weight(.semibold))
                 Spacer()
-                if let used = state?.snapshot?.headlineWindow?.displayUsedPercent {
+                if let used = state?.snapshot?.headlineWindow(for: account)?.displayUsedPercent {
                     Text("\(Int(used.rounded()))%")
                         .font(.body.weight(.semibold)).monospacedDigit()
                         .foregroundStyle(color(forUsed: used))
+                } else if account.provider == .claude, account.claudeUsageType == .week,
+                          state?.snapshot != nil {
+                    Text("–").foregroundStyle(.secondary)
+                        .help("Weekly usage is not reported for this account.")
                 }
             }
 
