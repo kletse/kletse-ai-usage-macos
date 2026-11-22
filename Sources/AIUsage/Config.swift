@@ -5,6 +5,11 @@ enum Provider: String, Codable, Sendable {
     case codex
 }
 
+enum ClaudeUsageType: String, Codable, Sendable {
+    case session
+    case week
+}
+
 /// One entry in `~/.config/ai-usage/accounts.json`.
 struct AccountConfig: Codable, Sendable, Identifiable, Hashable {
     /// Name shown in the dropdown.
@@ -19,6 +24,13 @@ struct AccountConfig: Codable, Sendable, Identifiable, Hashable {
     var dir: String
     /// Optional override for the Claude keychain service name.
     var keychainService: String?
+    /// Claude headline preference. Missing in older configs means Session.
+    var usageType: ClaudeUsageType?
+
+    var claudeUsageType: ClaudeUsageType {
+        get { usageType ?? .session }
+        set { usageType = newValue }
+    }
 
     var id: String { name + "|" + dir }
 

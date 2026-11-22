@@ -35,6 +35,19 @@ struct UsageSnapshot: Codable, Sendable {
             return pa != pb ? pa < pb : a.offset < b.offset
         }?.element
     }
+
+    /// Use Claude's selected allowance consistently in the menu bar and dropdown headline.
+    /// A missing weekly allowance must not silently display session or per-model usage.
+    func headlineWindow(for account: AccountConfig) -> UsageWindow? {
+        guard account.provider == .claude else { return headlineWindow }
+        switch account.claudeUsageType {
+        case .session:
+            // Preserve the existing fallback for plans that only report a monthly spend cap.
+            return windows.first { $0.label == "Session" } ?? headlineWindow
+        case .week:
+            return windows.first { $0.label == "Week" }
+        }
+    }
 }
 
 struct FetchError: Error, CustomStringConvertible {
