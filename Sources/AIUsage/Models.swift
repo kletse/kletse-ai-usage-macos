@@ -41,9 +41,9 @@ struct UsageSnapshot: Codable, Sendable {
     /// Set when this came from a local cache instead of a live request.
     var staleReason: String?
 
-    /// The headline limit: the window with the shortest period (session > week > month), taking
-    /// the first listed on a tie. Windows with an unknown period come last.
-    var headlineWindow: UsageWindow? {
+    /// The window with the shortest period (session > week > month), taking the first listed on a
+    /// tie. Windows with an unknown period come last. Views want `headlineWindow(for:)` instead.
+    var shortestPeriodWindow: UsageWindow? {
         windows.enumerated().min { a, b in
             let (pa, pb) = (a.element.period ?? .infinity, b.element.period ?? .infinity)
             return pa != pb ? pa < pb : a.offset < b.offset
@@ -53,18 +53,28 @@ struct UsageSnapshot: Codable, Sendable {
     /// Use Claude's selected allowance consistently in the menu bar and dropdown headline.
     /// A missing allowance must never silently display another limit, such as a per-model week.
     func headlineWindow(for account: AccountConfig) -> UsageWindow? {
-        guard account.provider == .claude else { return headlineWindow }
-        switch account.claudeUsageType {
-        case .session:
-            // Plans that only report a monthly spend cap (e.g. Enterprise) headline that cap.
-            return window(.session) ?? window(.spend)
-        case .week:
-            return window(.week)
+        guard account.provider == .claude else { return shortestPeriodWindow }
+        let selected: UsageWindow.Kind = switch account.claudeUsageType {
+        case .session: .session
+        case .week: .week
         }
+        // Plans that only report a monthly spend cap (e.g. Enterprise) headline that cap.
+        return window(selected) ?? window(.spend)
     }
 
     private func window(_ kind: UsageWindow.Kind) -> UsageWindow? {
-        windows.first { $0.kind == kind }
+        if let match = windows.first(where: { $0.kind == kind }) { return match }
+        // Snapshots cached before limits carried a kind have none at all. Until the first live
+        // fetch replaces them, go by the label, and only when it is unambiguous.
+        guard windows.allSatisfy({ $0.kind == nil }) else { return nil }
+        let label: String? = switch kind {
+        case .session: "Session"
+        case .week: "Week"
+        case .spend: "Monthly spend"
+        case .scopedWeek: nil
+        }
+        let matches = windows.filter { $0.label == label }
+        return matches.count == 1 ? matches[0] : nil
     }
 }
 

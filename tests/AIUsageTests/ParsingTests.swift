@@ -40,7 +40,7 @@ func money(exponent: Int, currency: String) throws {
         UsageWindow(label: label, usedPercent: 0, resetsAt: nil, period: period)
     }
     func headline(_ windows: [UsageWindow]) -> String? {
-        UsageSnapshot(windows: windows, fetchedAt: Date()).headlineWindow?.label
+        UsageSnapshot(windows: windows, fetchedAt: Date()).shortestPeriodWindow?.label
     }
     #expect(headline([window("unknown", nil), window("week", 604800), window("first", 18000), window("tie", 18000)]) == "first")
     #expect(headline([window("first", nil), window("second", nil)]) == "first")

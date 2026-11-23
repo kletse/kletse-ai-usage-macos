@@ -148,6 +148,19 @@ private final class RenewalFixture: @unchecked Sendable {
     #expect(fixture.callCount() == 1)
 }
 
+@Test func accountsSharingALoginAreCheckedOnceAndGetItsCredentials() async {
+    let fixture = RenewalFixture()
+    let account = AccountConfig(name: "Fixture", provider: .claude, dir: "/fixture")
+    var alias = account
+    alias.name = "Another label for the same login"
+    fixture.set(account, expiry: testEpoch.addingTimeInterval(120))
+    let result = await fixture.keeper().check(accounts: [account, alias])
+    #expect(result[account.id]?.renewed == true)
+    #expect(result[alias.id]?.renewed == true)
+    #expect(result[alias.id]?.credentials?.accessToken == "fixture-access-renewed")
+    #expect(fixture.callCount() == 1)
+}
+
 @Test func wakeAfterExpiryStillRenewsButKnownFinalExpiryDoesNot() async {
     let fixture = RenewalFixture()
     let account = AccountConfig(name: "Fixture", provider: .claude, dir: "/fixture")
@@ -160,6 +173,46 @@ private final class RenewalFixture: @unchecked Sendable {
     fixture.set(account, expiry: testEpoch, renewable: false)
     #expect(await fixture.keeper().check(account: account).nextCheck == nil)
     #expect(fixture.callCount() == 1)
+}
+
+@Test func loginThatCannotRenewOnlyWarnsOnceRenewalIsDue() async {
+    let fixture = RenewalFixture()
+    let account = AccountConfig(name: "Fixture", provider: .claude, dir: "/fixture")
+    let expiry = testEpoch.addingTimeInterval(3600)
+    fixture.set(account, expiry: expiry, renewable: false)
+    let valid = await fixture.keeper().check(account: account)
+    #expect(valid.error == nil)
+    #expect(valid.nextCheck == expiry.addingTimeInterval(-240))
+    fixture.setNow(expiry)
+    #expect(await fixture.keeper().check(account: account).error != nil)
+    #expect(fixture.callCount() == 0)
+}
+
+@Test func unsupportedLoginIsReportedWithoutBackoff() async {
+    let fixture = RenewalFixture()
+    let account = AccountConfig(name: "Fixture", provider: .claude, dir: "/fixture")
+    fixture.set(account, expiry: testEpoch.addingTimeInterval(120))
+    let keeper = ClaudeSessionRenewal(read: { try fixture.read($0) }, runUsage: { _, _ in
+        throw ClaudeCLIUsage.UnsupportedLogin(description: "Unsupported fixture login.")
+    }, now: { fixture.now() })
+    let result = await keeper.check(account: account)
+    #expect(result.error == "Unsupported fixture login.")
+    #expect(result.nextCheck == nil)
+}
+
+@Test func cancellingRenewalStopsTheSubprocess() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let script = root.appendingPathComponent("fake-claude")
+    try "#!/bin/sh\nexec /bin/sleep 10\n".write(to: script, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
+    let start = Date()
+    let task = Task { try await ClaudeCLIUsage.run(executable: script, environment: [:], directory: root) }
+    try await Task.sleep(for: .milliseconds(200))
+    task.cancel()
+    await #expect(throws: CancellationError.self) { try await task.value }
+    #expect(Date().timeIntervalSince(start) < 5)
 }
 
 @Test func credentialMetadataParsing() throws {
@@ -190,7 +243,7 @@ private final class RenewalFixture: @unchecked Sendable {
     let other = AccountConfig(name: "Other", provider: .claude, dir: "/fixture/other")
     let file = try ClaudeCLIUsage.environment(account: other, source: .file, inherited: inherited)
     #expect(file["CLAUDE_SECURESTORAGE_CONFIG_DIR"] == other.expandedDir)
-    #expect(throws: FetchError.self) {
+    #expect(throws: ClaudeCLIUsage.UnsupportedLogin.self) {
         try ClaudeCLIUsage.environment(account: other, source: .keychain("arbitrary"), inherited: inherited)
     }
 }
