@@ -11,17 +11,18 @@ struct UsageWindow: Codable, Sendable, Identifiable, Hashable {
     var resetIsEstimate = false
     /// Length of the limit window in seconds, e.g. 18 000 for a 5-hour session. Nil when unknown.
     var period: TimeInterval?
-    /// What the limit measures, set by providers that report it. Selection by usage type relies on
-    /// this rather than on the display label.
+    /// The limit's semantic type as the provider reports it (Claude's `limits[].kind`), kept so
+    /// selection never depends on the display label: a scoped weekly limit without a model name is
+    /// labelled plain "Week", the same as the overall weekly allowance.
     var kind: Kind?
 
     enum Kind: String, Codable, Sendable {
-        /// The 5-hour session.
+        /// The 5-hour session (`session`, legacy `five_hour`).
         case session
-        /// The overall weekly allowance.
-        case week
-        /// A weekly limit scoped to a model or other subset.
-        case scopedWeek
+        /// The overall weekly allowance (`weekly_all`, legacy `seven_day`).
+        case weeklyAll = "weekly_all"
+        /// A weekly limit scoped to a model or other subset (`weekly_scoped`, legacy `seven_day_opus`/`_sonnet`).
+        case weeklyScoped = "weekly_scoped"
         /// A monthly spend cap.
         case spend
     }
@@ -59,7 +60,7 @@ struct UsageSnapshot: Codable, Sendable {
             // Plans that only report a monthly spend cap (e.g. Enterprise) headline that cap.
             return window(.session) ?? window(.spend)
         case .week:
-            return window(.week)
+            return window(.weeklyAll)
         }
     }
 

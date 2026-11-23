@@ -244,9 +244,9 @@ struct ClaudeUsage: Decodable {
             }
         } else {
             let legacy: [(String, TimeInterval, UsageWindow.Kind, Window?)] = [
-                ("Session", Self.session, .session, five_hour), ("Week", Self.week, .week, seven_day),
-                ("Week · Opus", Self.week, .scopedWeek, seven_day_opus),
-                ("Week · Sonnet", Self.week, .scopedWeek, seven_day_sonnet),
+                ("Session", Self.session, .session, five_hour), ("Week", Self.week, .weeklyAll, seven_day),
+                ("Week · Opus", Self.week, .weeklyScoped, seven_day_opus),
+                ("Week · Sonnet", Self.week, .weeklyScoped, seven_day_sonnet),
             ]
             for (label, period, kind, window) in legacy {
                 guard let window, let used = window.utilization else { continue }
@@ -300,8 +300,8 @@ struct ClaudeUsage: Decodable {
     private static func kind(for limit: Limit) -> UsageWindow.Kind? {
         switch limit.kind {
         case "session": .session
-        case "weekly_all": .week
-        case "weekly_scoped": .scopedWeek
+        case "weekly_all": .weeklyAll
+        case "weekly_scoped": .weeklyScoped
         default: nil
         }
     }
