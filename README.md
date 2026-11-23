@@ -66,8 +66,9 @@ also edit the JSON file directly.
 
 For Claude accounts, **Usage type** below **Provider** chooses **Session** (the default) or
 **Week** for the menu bar percentage and dropdown headline. Week uses the overall weekly
-allowance, not a per-model limit. All limits remain visible in the dropdown. If weekly usage
-is not reported, Week shows a dash. The selection saves automatically for each account.
+allowance, not a per-model limit. All limits remain visible in the dropdown. If the selected
+usage is not reported, the monthly spend cap is shown when there is one, otherwise a dash. The
+selection saves automatically for each account.
 
 <p align="center">
   <img src="docs/accounts.png" alt="Accounts window with a sidebar of accounts and the selected account's settings" width="560">

@@ -1,8 +1,9 @@
 import AppKit
 
-func fetchSnapshot(for account: AccountConfig) async throws -> UsageSnapshot {
+/// `claudeCredentials` is a login already read during this refresh, to avoid a second Keychain read.
+func fetchSnapshot(for account: AccountConfig, claudeCredentials: ClaudeCredentials? = nil) async throws -> UsageSnapshot {
     switch account.provider {
-    case .claude: try await ClaudeProvider(account: account).fetch()
+    case .claude: try await ClaudeProvider(account: account).fetch(credentials: claudeCredentials)
     case .codex: try await CodexProvider(account: account).fetch()
     }
 }

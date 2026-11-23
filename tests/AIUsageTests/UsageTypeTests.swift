@@ -60,6 +60,8 @@ import Testing
         UsageWindow(label: "Monthly spend", usedPercent: 82, period: 2592000, kind: .spend),
     ], fetchedAt: Date())
     #expect(monthly.headlineWindow(for: account)?.usedPercent == 82)
+    account.claudeUsageType = .week
+    #expect(monthly.headlineWindow(for: account)?.usedPercent == 82)
 }
 
 /// A scoped weekly limit without a model name is labelled plain "Week"; it must not stand in for
@@ -79,4 +81,24 @@ import Testing
 func unknownUsageTypeDoesNotBreakTheConfig(raw: String, expected: ClaudeUsageType) throws {
     let data = Data(#"[{"name":"Claude","provider":"claude","dir":"~/.claude","usageType":"\#(raw)"}]"#.utf8)
     #expect(try AppConfig.decode(data).first?.claudeUsageType == expected)
+}
+
+/// Snapshots cached before limits carried a kind still headline until the first live fetch.
+@Test func cachedSnapshotWithoutKindsFallsBackToUnambiguousLabels() {
+    let cached = UsageSnapshot(windows: [
+        UsageWindow(label: "Session", usedPercent: 6, period: 18000),
+        UsageWindow(label: "Week", usedPercent: 1, period: 604800),
+        UsageWindow(label: "Week · Fable", usedPercent: 90, period: 604800),
+    ], fetchedAt: Date())
+    var account = AccountConfig(name: "Claude", provider: .claude, dir: "~/.claude")
+    #expect(cached.headlineWindow(for: account)?.usedPercent == 6)
+    account.claudeUsageType = .week
+    #expect(cached.headlineWindow(for: account)?.usedPercent == 1)
+
+    // Two plain "Week" labels can't be told apart, so neither is shown.
+    let ambiguous = UsageSnapshot(windows: [
+        UsageWindow(label: "Week", usedPercent: 90, period: 604800),
+        UsageWindow(label: "Week", usedPercent: 1, period: 604800),
+    ], fetchedAt: Date())
+    #expect(ambiguous.headlineWindow(for: account) == nil)
 }

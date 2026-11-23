@@ -43,13 +43,18 @@ struct ClaudeProvider: Sendable {
         return dir == Self.defaultDir ? [stateFile, dir + "/.claude.json"] : [stateFile]
     }
 
-    func fetch() async throws -> UsageSnapshot {
+    /// `credentials` is a login the caller has just read; without one it is read here.
+    func fetch(credentials provided: ClaudeCredentials? = nil) async throws -> UsageSnapshot {
         let state = readState()
         let credentials: ClaudeCredentials
-        do {
-            credentials = try await readCredentials()
-        } catch {
-            return try cached(state, reason: "\(error)")
+        if let provided {
+            credentials = provided
+        } else {
+            do {
+                credentials = try await readCredentials()
+            } catch {
+                return try cached(state, reason: "\(error)")
+            }
         }
         if let expiresAt = credentials.expiresAt, expiresAt < Date() {
             return try cached(state, reason: "Token expired. Open Claude Code to refresh it.")

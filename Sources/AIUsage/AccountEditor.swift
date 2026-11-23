@@ -473,7 +473,7 @@ final class AccountsAutosaver {
         }
     }
 
-    private static func ignoringDisplay(_ accounts: [AccountConfig]) -> [AccountConfig] {
+    private static func withoutUsageType(_ accounts: [AccountConfig]) -> [AccountConfig] {
         accounts.map { var account = $0; account.usageType = nil; return account }
     }
 
@@ -492,7 +492,7 @@ final class AccountsAutosaver {
             try AppConfig.save(accounts)
             savedData = try Data(contentsOf: url)
             // A usage type change only re-picks the headline from usage already loaded.
-            let displayOnly = Self.ignoringDisplay(accounts) == Self.ignoringDisplay(savedAccounts)
+            let displayOnly = Self.withoutUsageType(accounts) == Self.withoutUsageType(savedAccounts)
             savedAccounts = accounts
             error = nil
             if displayOnly {

@@ -19,7 +19,6 @@ struct AccountState: Sendable {
 @Observable
 final class UsageStore {
     static let refreshInterval: TimeInterval = 5 * 60
-    private static let renewalLog = Logger(subsystem: "be.kletse.ai-usage", category: "claude-renewal")
 
     private(set) var accounts: [AccountConfig] = []
     private(set) var states: [String: AccountState] = [:]
@@ -30,6 +29,8 @@ final class UsageStore {
     private(set) var animationPreview: AnimationPreview?
 
     @ObservationIgnored private var retryAfter: [String: Date] = [:]
+    /// The usage fetch's own latest problem per account, kept apart from renewal problems.
+    @ObservationIgnored private var fetchErrors: [String: String] = [:]
     @ObservationIgnored private var wakeObserver: WakeObserver?
     @ObservationIgnored private var cache: SnapshotCache?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
@@ -112,6 +113,7 @@ final class UsageStore {
             }.map(\.id))
             states = states.filter { unchanged.contains($0.key) }
             retryAfter = retryAfter.filter { unchanged.contains($0.key) }
+            fetchErrors = fetchErrors.filter { unchanged.contains($0.key) }
             accounts = updated
             configError = nil
             return true
@@ -138,8 +140,9 @@ final class UsageStore {
         let due = accounts.filter { (retryAfter[$0.id] ?? .distantPast) <= now }
         let results = await withTaskGroup(of: (String, Result<UsageSnapshot, Error>).self) { group in
             for account in due {
+                let credentials = renewal[account.id]?.credentials
                 group.addTask {
-                    do { return (account.id, .success(try await fetchSnapshot(for: account))) }
+                    do { return (account.id, .success(try await fetchSnapshot(for: account, claudeCredentials: credentials))) }
                     catch { return (account.id, .failure(error)) }
                 }
             }
@@ -156,18 +159,29 @@ final class UsageStore {
                 if snapshot.staleReason == nil || (state.snapshot?.fetchedAt ?? .distantPast) <= snapshot.fetchedAt {
                     state.snapshot = snapshot
                 }
-                state.error = snapshot.staleReason ?? renewal[id]?.error
+                fetchErrors[id] = snapshot.staleReason
                 retryAfter[id] = nil
             case .failure(let error):
-                state.error = renewal[id]?.error ?? (error as? FetchError)?.description ?? error.localizedDescription
+                fetchErrors[id] = (error as? FetchError)?.description ?? error.localizedDescription
                 retryAfter[id] = (error as? FetchError)?.retryAfter
             }
             states[id] = state
+        }
+        // A renewal problem says what to do about it, so it wins over the fetch's own message.
+        // Covering every account keeps it current for those waiting out a Retry-After too.
+        for account in accounts {
+            guard var state = states[account.id] else { continue }
+            let error = renewal[account.id]?.error ?? fetchErrors[account.id]
+            if state.error != error {
+                state.error = error
+                states[account.id] = state
+            }
         }
         // Forget accounts that were removed from the config.
         let ids = Set(accounts.map(\.id))
         states = states.filter { ids.contains($0.key) }
         retryAfter = retryAfter.filter { ids.contains($0.key) }
+        fetchErrors = fetchErrors.filter { ids.contains($0.key) }
         // Cache failures must not turn a successful fetch into an account error.
         try? cache?.save(accounts: accounts, snapshots: states.compactMapValues(\.snapshot))
     }
@@ -176,7 +190,7 @@ final class UsageStore {
         renewalTask?.cancel()
         renewalTask = nil
         guard let date else { return }
-        Self.renewalLog.info("Scheduled Claude renewal check at: \(date.timeIntervalSince1970, privacy: .public)")
+        ClaudeSessionRenewal.log.info("Scheduled Claude renewal check at: \(date.timeIntervalSince1970, privacy: .public)")
         renewalTask = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(max(1, date.timeIntervalSinceNow))) }
             catch { return }

@@ -1,17 +1,21 @@
 import Darwin
 import Foundation
+import os
 import OSLog
 
 struct ClaudeRenewalCheck: Sendable {
     var nextCheck: Date?
     var error: String?
     var renewed = false
+    /// The login as this check last read it, so the usage fetch that follows needn't read the
+    /// Keychain again. Nil when it could not be read or may have changed since.
+    var credentials: ClaudeCredentials?
 }
 
 /// Owns scheduling state, never credentials on disk. Claude Code performs all token writes.
 actor ClaudeSessionRenewal {
     static let leadTime: TimeInterval = 4 * 60
-    private static let log = Logger(subsystem: "be.kletse.ai-usage", category: "claude-renewal")
+    static let log = Logger(subsystem: "be.kletse.ai-usage", category: "claude-renewal")
 
     private struct Failure {
         var expiry: Date
@@ -40,7 +44,7 @@ actor ClaudeSessionRenewal {
         self.now = now
     }
 
-    private func scope(_ account: AccountConfig) -> String {
+    private nonisolated func scope(_ account: AccountConfig) -> String {
         account.expandedDir + "|" + (account.keychainService ?? "")
     }
 
@@ -48,15 +52,22 @@ actor ClaudeSessionRenewal {
         let claude = accounts.filter { $0.provider == .claude }
         let active = Set(claude.map(scope))
         failures = failures.filter { active.contains($0.key) }
-        var results: [String: ClaudeRenewalCheck] = [:]
-        for account in claude {
-            results[account.id] = await check(account: account)
+        // One check per login, all at once: a hung CLI for one login must not hold up the rest.
+        let logins = Dictionary(grouping: claude) { scope($0) }
+        return await withTaskGroup(of: ([String], ClaudeRenewalCheck).self) { group in
+            for accounts in logins.values {
+                group.addTask { (accounts.map(\.id), await self.check(account: accounts[0])) }
+            }
+            var results: [String: ClaudeRenewalCheck] = [:]
+            for await (ids, check) in group {
+                for id in ids { results[id] = check }
+            }
+            return results
         }
-        return results
     }
 
+    /// `account` must be a Claude account; `check(accounts:)` filters for that.
     func check(account: AccountConfig) async -> ClaudeRenewalCheck {
-        guard account.provider == .claude else { return ClaudeRenewalCheck() }
         let key = scope(account)
         if inFlight.contains(key) {
             return ClaudeRenewalCheck(nextCheck: now().addingTimeInterval(30))
@@ -72,19 +83,21 @@ actor ClaudeSessionRenewal {
             // Missing/unreadable credentials never trigger a CLI login or browser flow.
             return ClaudeRenewalCheck(error: failures[key]?.message)
         }
-        guard let expiry = credentials.expiresAt else { return ClaudeRenewalCheck() }
+        guard let expiry = credentials.expiresAt else { return ClaudeRenewalCheck(credentials: credentials) }
         let current = now()
         if failures[key]?.expiry != expiry { failures[key] = nil }
+        let deadline = expiry.addingTimeInterval(-Self.leadTime)
+        if deadline > current { return ClaudeRenewalCheck(nextCheck: deadline, credentials: credentials) }
+        // Only a login that now needs renewing is worth a warning; until then usage still loads.
         guard credentials.hasRefreshToken else {
-            return ClaudeRenewalCheck(error: "Claude login cannot renew automatically. Run claude auth login.")
+            return ClaudeRenewalCheck(error: "Claude login cannot renew automatically. Run claude auth login.",
+                                      credentials: credentials)
         }
         if let finalExpiry = credentials.refreshTokenExpiresAt, finalExpiry <= current {
-            return ClaudeRenewalCheck(error: "Claude login expired. Run claude auth login.")
+            return ClaudeRenewalCheck(error: "Claude login expired. Run claude auth login.", credentials: credentials)
         }
-        let deadline = expiry.addingTimeInterval(-Self.leadTime)
-        if deadline > current { return ClaudeRenewalCheck(nextCheck: deadline) }
         if let failure = failures[key], failure.retryAt > current {
-            return ClaudeRenewalCheck(nextCheck: failure.retryAt, error: failure.message)
+            return ClaudeRenewalCheck(nextCheck: failure.retryAt, error: failure.message, credentials: credentials)
         }
         do {
             try await runUsage(account, credentials.source)
@@ -100,7 +113,11 @@ actor ClaudeSessionRenewal {
             // A very short server lifetime still gets a bounded retry rather than a busy loop.
             return ClaudeRenewalCheck(nextCheck: max(now().addingTimeInterval(5),
                                                      nextExpiry.addingTimeInterval(-Self.leadTime)),
-                                      renewed: true)
+                                      renewed: true, credentials: updated)
+        } catch let error as ClaudeCLIUsage.UnsupportedLogin {
+            // Retrying can't help, so no backoff or extra wake-up: the regular poll rechecks it.
+            failures[key] = nil
+            return ClaudeRenewalCheck(error: error.description, credentials: credentials)
         } catch {
             let count = min((failures[key]?.count ?? 0) + 1, 5)
             let retryAt = now().addingTimeInterval(min(300, 30 * pow(2, Double(count - 1))))
@@ -114,6 +131,11 @@ actor ClaudeSessionRenewal {
 }
 
 enum ClaudeCLIUsage {
+    /// A login the CLI can't be pointed at, so automatic renewal is not attempted.
+    struct UnsupportedLogin: Error, CustomStringConvertible {
+        let description: String
+    }
+
     static let arguments = [
         "--safe-mode", "--setting-sources", "", "--strict-mcp-config", "--mcp-config", "{\"mcpServers\":{}}",
         "--tools", "", "--no-chrome", "--no-session-persistence", "-p", "/usage",
@@ -121,6 +143,7 @@ enum ClaudeCLIUsage {
 
     /// Match the credential source actually selected by the provider, including the two default
     /// Keychain names. GUI launches often have a minimal PATH, so resolve the native install too.
+    /// Throws `UnsupportedLogin` for a Keychain item the CLI has no way to select.
     static func environment(account: AccountConfig, source: ClaudeCredentials.Source,
                             inherited: [String: String]) throws -> [String: String] {
         var environment = inherited.filter {
@@ -141,7 +164,7 @@ enum ClaudeCLIUsage {
                 environment["CLAUDE_SECURESTORAGE_CONFIG_DIR"] = ""
                 environment.removeValue(forKey: "CLAUDE_CONFIG_DIR")
             } else {
-                throw FetchError("Automatic renewal cannot target this custom Claude keychain service. Open Claude Code to renew it.")
+                throw UnsupportedLogin(description: "Automatic renewal cannot target this custom Claude keychain service. Open Claude Code to renew it.")
             }
         }
         environment["CLAUDE_CODE_SAFE_MODE"] = "1"
@@ -172,7 +195,11 @@ enum ClaudeCLIUsage {
 
     static func run(executable: URL, environment: [String: String], directory: URL,
                     timeout: TimeInterval = 30) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+        // Signalled when the process exits, and also on cancellation to cut the wait short.
+        let finished = DispatchSemaphore(value: 0)
+        let cancelled = OSAllocatedUnfairLock(initialState: false)
+        try await withTaskCancellationHandler {
+          try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             DispatchQueue.global(qos: .utility).async {
                 do {
                     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -188,7 +215,6 @@ enum ClaudeCLIUsage {
                 process.standardInput = FileHandle.nullDevice
                 process.standardOutput = FileHandle.nullDevice
                 process.standardError = FileHandle.nullDevice
-                let finished = DispatchSemaphore(value: 0)
                 process.terminationHandler = { _ in finished.signal() }
                 do {
                     try process.run()
@@ -196,19 +222,30 @@ enum ClaudeCLIUsage {
                     continuation.resume(throwing: FetchError("Could not launch Claude CLI for renewal."))
                     return
                 }
-                if finished.wait(timeout: .now() + timeout) == .timedOut {
-                    process.terminate()
-                    if finished.wait(timeout: .now() + 2) == .timedOut {
+                let timedOut = finished.wait(timeout: .now() + timeout) == .timedOut
+                let wasCancelled = cancelled.withLock { $0 }
+                if timedOut || wasCancelled {
+                    // Either signal can arrive during these waits, so go by whether it still runs.
+                    if process.isRunning {
+                        process.terminate()
+                        _ = finished.wait(timeout: .now() + 2)
+                    }
+                    if process.isRunning {
                         kill(process.processIdentifier, SIGKILL)
                         _ = finished.wait(timeout: .now() + 2)
                     }
-                    continuation.resume(throwing: FetchError("Claude CLI renewal timed out. Retrying automatically."))
+                    continuation.resume(throwing: wasCancelled ? CancellationError()
+                        : FetchError("Claude CLI renewal timed out. Retrying automatically."))
                 } else if process.terminationStatus != 0 {
                     continuation.resume(throwing: FetchError("Claude CLI renewal failed. Retrying automatically; check your Claude Code login if it persists."))
                 } else {
                     continuation.resume()
                 }
             }
+          }
+        } onCancel: {
+            cancelled.withLock { $0 = true }
+            finished.signal()
         }
     }
 }
