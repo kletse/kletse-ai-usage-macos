@@ -80,8 +80,10 @@ actor ClaudeSessionRenewal {
         do {
             credentials = try await read(account)
         } catch {
-            // Missing/unreadable credentials never trigger a CLI login or browser flow.
-            return ClaudeRenewalCheck(error: failures[key]?.message)
+            // Missing/unreadable credentials never trigger a CLI login or browser flow. Nothing
+            // is being retried either, so an earlier renewal failure no longer applies.
+            failures[key] = nil
+            return ClaudeRenewalCheck()
         }
         guard let expiry = credentials.expiresAt else { return ClaudeRenewalCheck(credentials: credentials) }
         let current = now()
@@ -114,6 +116,9 @@ actor ClaudeSessionRenewal {
             return ClaudeRenewalCheck(nextCheck: max(now().addingTimeInterval(5),
                                                      nextExpiry.addingTimeInterval(-Self.leadTime)),
                                       renewed: true, credentials: updated)
+        } catch is CancellationError {
+            // Stopped by the caller, not a failed renewal: no backoff, the next check tries again.
+            return ClaudeRenewalCheck()
         } catch let error as ClaudeCLIUsage.UnsupportedLogin {
             // Retrying can't help, so no backoff or extra wake-up: the regular poll rechecks it.
             failures[key] = nil
@@ -234,8 +239,9 @@ enum ClaudeCLIUsage {
                         kill(process.processIdentifier, SIGKILL)
                         _ = finished.wait(timeout: .now() + 2)
                     }
-                    continuation.resume(throwing: wasCancelled ? CancellationError()
-                        : FetchError("Claude CLI renewal timed out. Retrying automatically."))
+                    let error: any Error = wasCancelled ? CancellationError()
+                        : FetchError("Claude CLI renewal timed out. Retrying automatically.")
+                    continuation.resume(throwing: error)
                 } else if process.terminationStatus != 0 {
                     continuation.resume(throwing: FetchError("Claude CLI renewal failed. Retrying automatically; check your Claude Code login if it persists."))
                 } else {

@@ -23,6 +23,7 @@ private final class RenewalFixture: @unchecked Sendable {
                 refreshTokenExpiresAt: finalExpiry, source: .file)
         }
     }
+    func remove(_ account: AccountConfig) { lock.withLock { logins[account.expandedDir] = nil } }
     func read(_ account: AccountConfig) throws -> ClaudeCredentials {
         try lock.withLock {
             guard let value = logins[account.expandedDir] else { throw FetchError("No fixture login") }
@@ -213,6 +214,21 @@ private final class RenewalFixture: @unchecked Sendable {
     task.cancel()
     await #expect(throws: CancellationError.self) { try await task.value }
     #expect(Date().timeIntervalSince(start) < 5)
+}
+
+@Test func removedLoginDropsAnEarlierRenewalFailure() async {
+    let fixture = RenewalFixture()
+    let account = AccountConfig(name: "Fixture", provider: .claude, dir: "/fixture")
+    fixture.set(account, expiry: testEpoch.addingTimeInterval(120))
+    fixture.setAdvances(false)
+    let keeper = fixture.keeper()
+    #expect(await keeper.check(account: account).error != nil)
+    let gone = AccountConfig(name: "Fixture", provider: .claude, dir: "/fixture/logged-out")
+    #expect(await keeper.check(account: gone).error == nil)
+    fixture.remove(account)
+    let removed = await keeper.check(account: account)
+    #expect(removed.error == nil)
+    #expect(removed.nextCheck == nil)
 }
 
 @Test func credentialMetadataParsing() throws {
