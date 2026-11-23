@@ -99,8 +99,10 @@ final class UsageStore {
         } while refreshQueued
     }
 
-    private func refreshOnce() async {
-        // Reload the config each time so edits apply without restarting.
+    /// Rereads accounts.json without fetching, e.g. after a display-only edit. Returns false and
+    /// sets `configError` when the file can't be read.
+    @discardableResult
+    func reloadConfig() -> Bool {
         do {
             let updated = try AppConfig.load()
             let previous = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0) })
@@ -112,8 +114,16 @@ final class UsageStore {
             retryAfter = retryAfter.filter { unchanged.contains($0.key) }
             accounts = updated
             configError = nil
+            return true
         } catch {
             configError = "Could not read \(AppConfig.path): \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    private func refreshOnce() async {
+        // Reload the config each time so edits apply without restarting.
+        guard reloadConfig() else {
             renewalTask?.cancel()
             renewalTask = nil
             return

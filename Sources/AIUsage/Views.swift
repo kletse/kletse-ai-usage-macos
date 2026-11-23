@@ -214,10 +214,10 @@ struct AccountCard: View {
                     Text("\(Int(used.rounded()))%")
                         .font(.body.weight(.semibold)).monospacedDigit()
                         .foregroundStyle(color(forUsed: used))
-                } else if account.provider == .claude, account.claudeUsageType == .week,
-                          state?.snapshot != nil {
+                } else if state?.snapshot != nil {
+                    // Matches the menu bar, which shows a dash whenever there is no headline.
                     Text("–").foregroundStyle(.secondary)
-                        .help("Weekly usage is not reported for this account.")
+                        .help("The usage shown in the menu bar is not reported for this account.")
                 }
             }
 

@@ -11,6 +11,20 @@ struct UsageWindow: Codable, Sendable, Identifiable, Hashable {
     var resetIsEstimate = false
     /// Length of the limit window in seconds, e.g. 18 000 for a 5-hour session. Nil when unknown.
     var period: TimeInterval?
+    /// What the limit measures, set by providers that report it. Selection by usage type relies on
+    /// this rather than on the display label.
+    var kind: Kind?
+
+    enum Kind: String, Codable, Sendable {
+        /// The 5-hour session.
+        case session
+        /// The overall weekly allowance.
+        case week
+        /// A weekly limit scoped to a model or other subset.
+        case scopedWeek
+        /// A monthly spend cap.
+        case spend
+    }
 
     var id: String { label }
     /// Used percentage clamped to 0...100 for display.
@@ -37,16 +51,20 @@ struct UsageSnapshot: Codable, Sendable {
     }
 
     /// Use Claude's selected allowance consistently in the menu bar and dropdown headline.
-    /// A missing weekly allowance must not silently display session or per-model usage.
+    /// A missing allowance must never silently display another limit, such as a per-model week.
     func headlineWindow(for account: AccountConfig) -> UsageWindow? {
         guard account.provider == .claude else { return headlineWindow }
         switch account.claudeUsageType {
         case .session:
-            // Preserve the existing fallback for plans that only report a monthly spend cap.
-            return windows.first { $0.label == "Session" } ?? headlineWindow
+            // Plans that only report a monthly spend cap (e.g. Enterprise) headline that cap.
+            return window(.session) ?? window(.spend)
         case .week:
-            return windows.first { $0.label == "Week" }
+            return window(.week)
         }
+    }
+
+    private func window(_ kind: UsageWindow.Kind) -> UsageWindow? {
+        windows.first { $0.kind == kind }
     }
 }
 

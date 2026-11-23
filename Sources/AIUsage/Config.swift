@@ -8,6 +8,13 @@ enum Provider: String, Codable, Sendable {
 enum ClaudeUsageType: String, Codable, Sendable {
     case session
     case week
+
+    /// A hand-edited value that isn't recognised falls back to Session instead of failing the
+    /// whole accounts file over one display preference.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = ClaudeUsageType(rawValue: raw.lowercased()) ?? .session
+    }
 }
 
 /// One entry in `~/.config/ai-usage/accounts.json`.

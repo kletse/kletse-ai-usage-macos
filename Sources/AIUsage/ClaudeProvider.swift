@@ -240,16 +240,18 @@ struct ClaudeUsage: Decodable {
             for limit in limits {
                 guard let percent = limit.percent else { continue }
                 result.append(UsageWindow(label: Self.label(for: limit), usedPercent: percent, resetsAt: Dates.parseISO(limit.resets_at),
-                                          period: Self.period(for: limit)))
+                                          period: Self.period(for: limit), kind: Self.kind(for: limit)))
             }
         } else {
-            let legacy: [(String, TimeInterval, Window?)] = [
-                ("Session", Self.session, five_hour), ("Week", Self.week, seven_day),
-                ("Week · Opus", Self.week, seven_day_opus), ("Week · Sonnet", Self.week, seven_day_sonnet),
+            let legacy: [(String, TimeInterval, UsageWindow.Kind, Window?)] = [
+                ("Session", Self.session, .session, five_hour), ("Week", Self.week, .week, seven_day),
+                ("Week · Opus", Self.week, .scopedWeek, seven_day_opus),
+                ("Week · Sonnet", Self.week, .scopedWeek, seven_day_sonnet),
             ]
-            for (label, period, window) in legacy {
+            for (label, period, kind, window) in legacy {
                 guard let window, let used = window.utilization else { continue }
-                result.append(UsageWindow(label: label, usedPercent: used, resetsAt: Dates.parseISO(window.resets_at), period: period))
+                result.append(UsageWindow(label: label, usedPercent: used, resetsAt: Dates.parseISO(window.resets_at),
+                                          period: period, kind: kind))
             }
         }
 
@@ -264,7 +266,8 @@ struct ClaudeUsage: Decodable {
                 resetsAt: Dates.startOfNextMonth(),
                 detail: "\(Self.money(used, exponent: exponent, currency: currency)) of \(Self.money(limit, exponent: exponent, currency: currency))",
                 resetIsEstimate: true,
-                period: Self.month
+                period: Self.month,
+                kind: .spend
             ))
         } else if let extra = extra_usage, extra.is_enabled == true, let limit = extra.monthly_limit, limit > 0 {
             let used = extra.used_credits ?? 0
@@ -275,7 +278,8 @@ struct ClaudeUsage: Decodable {
                 resetsAt: Dates.startOfNextMonth(),
                 detail: "\(Self.money(used, exponent: 2, currency: currency)) of \(Self.money(limit, exponent: 2, currency: currency))",
                 resetIsEstimate: true,
-                period: Self.month
+                period: Self.month,
+                kind: .spend
             ))
         }
         return result
@@ -289,6 +293,15 @@ struct ClaudeUsage: Decodable {
         switch limit.kind {
         case "session": session
         case "weekly_all", "weekly_scoped": week
+        default: nil
+        }
+    }
+
+    private static func kind(for limit: Limit) -> UsageWindow.Kind? {
+        switch limit.kind {
+        case "session": .session
+        case "weekly_all": .week
+        case "weekly_scoped": .scopedWeek
         default: nil
         }
     }

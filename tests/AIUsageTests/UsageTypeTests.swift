@@ -45,8 +45,8 @@ import Testing
 @Test @MainActor func missingWeeklyAllowanceDoesNotShowAnotherLimit() {
     var account = AccountConfig(name: "Claude", provider: .claude, dir: "~/.claude", usageType: .week)
     let snapshot = UsageSnapshot(windows: [
-        UsageWindow(label: "Session", usedPercent: 6, period: 18000),
-        UsageWindow(label: "Week · Fable", usedPercent: 90, period: 604800),
+        UsageWindow(label: "Session", usedPercent: 6, period: 18000, kind: .session),
+        UsageWindow(label: "Week · Fable", usedPercent: 90, period: 604800, kind: .scopedWeek),
     ], fetchedAt: Date())
     #expect(snapshot.headlineWindow(for: account) == nil)
     let store = UsageStore(fixed: [(account, snapshot)])
@@ -57,7 +57,26 @@ import Testing
     }
     account.claudeUsageType = .session
     let monthly = UsageSnapshot(windows: [
-        UsageWindow(label: "Monthly spend", usedPercent: 82, period: 2592000),
+        UsageWindow(label: "Monthly spend", usedPercent: 82, period: 2592000, kind: .spend),
     ], fetchedAt: Date())
     #expect(monthly.headlineWindow(for: account)?.usedPercent == 82)
+}
+
+/// A scoped weekly limit without a model name is labelled plain "Week"; it must not stand in for
+/// the overall weekly allowance, nor for a missing session.
+@Test func scopedWeekNeverStandsInForAnotherAllowance() throws {
+    let payload = #"{"limits":[{"kind":"weekly_scoped","percent":90},{"kind":"weekly_all","percent":1}]}"#
+    let windows = try JSONDecoder().decode(ClaudeUsage.self, from: Data(payload.utf8)).windows()
+    #expect(windows.map(\.label) == ["Week", "Week"])
+    let snapshot = UsageSnapshot(windows: windows, fetchedAt: Date())
+    let week = AccountConfig(name: "Claude", provider: .claude, dir: "~/.claude", usageType: .week)
+    #expect(snapshot.headlineWindow(for: week)?.usedPercent == 1)
+    let session = AccountConfig(name: "Claude", provider: .claude, dir: "~/.claude")
+    #expect(snapshot.headlineWindow(for: session) == nil)
+}
+
+@Test(arguments: [("week", ClaudeUsageType.week), ("Week", .week), ("weekly", .session), ("SESSION", .session)])
+func unknownUsageTypeDoesNotBreakTheConfig(raw: String, expected: ClaudeUsageType) throws {
+    let data = Data(#"[{"name":"Claude","provider":"claude","dir":"~/.claude","usageType":"\#(raw)"}]"#.utf8)
+    #expect(try AppConfig.decode(data).first?.claudeUsageType == expected)
 }
