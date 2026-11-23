@@ -51,7 +51,8 @@ struct UsageSnapshot: Codable, Sendable {
     }
 
     /// Use Claude's selected allowance consistently in the menu bar and dropdown headline.
-    /// A missing allowance must never silently display another limit, such as a per-model week.
+    /// A missing allowance never displays another allowance, such as a per-model week; only the
+    /// monthly spend cap stands in for it.
     func headlineWindow(for account: AccountConfig) -> UsageWindow? {
         guard account.provider == .claude else { return shortestPeriodWindow }
         let selected: UsageWindow.Kind = switch account.claudeUsageType {
