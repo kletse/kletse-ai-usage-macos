@@ -387,6 +387,8 @@ struct AccountEditor: View {
             if account.name == account.provider.rawValue.capitalized {
                 row.wrappedValue.account.name = provider.rawValue.capitalized
             }
+            // Usage type is Claude only; don't leave a hidden choice behind on Codex.
+            if provider != .claude { row.wrappedValue.account.usageType = nil }
             row.wrappedValue.account.provider = provider
         })
     }
@@ -471,6 +473,10 @@ final class AccountsAutosaver {
         }
     }
 
+    private static func ignoringDisplay(_ accounts: [AccountConfig]) -> [AccountConfig] {
+        accounts.map { var account = $0; account.usageType = nil; return account }
+    }
+
     /// Writes any pending change now.
     func flush() {
         delay?.cancel()
@@ -485,9 +491,15 @@ final class AccountsAutosaver {
             }
             try AppConfig.save(accounts)
             savedData = try Data(contentsOf: url)
+            // A usage type change only re-picks the headline from usage already loaded.
+            let displayOnly = Self.ignoringDisplay(accounts) == Self.ignoringDisplay(savedAccounts)
             savedAccounts = accounts
             error = nil
-            Task { await store.refresh() }
+            if displayOnly {
+                store.reloadConfig()
+            } else {
+                Task { await store.refresh() }
+            }
         } catch {
             self.error = (error as? FetchError)?.description ?? error.localizedDescription
         }
