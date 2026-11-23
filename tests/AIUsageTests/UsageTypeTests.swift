@@ -46,7 +46,7 @@ import Testing
     var account = AccountConfig(name: "Claude", provider: .claude, dir: "~/.claude", usageType: .week)
     let snapshot = UsageSnapshot(windows: [
         UsageWindow(label: "Session", usedPercent: 6, period: 18000, kind: .session),
-        UsageWindow(label: "Week · Fable", usedPercent: 90, period: 604800, kind: .scopedWeek),
+        UsageWindow(label: "Week · Fable", usedPercent: 90, period: 604800, kind: .weeklyScoped),
     ], fetchedAt: Date())
     #expect(snapshot.headlineWindow(for: account) == nil)
     let store = UsageStore(fixed: [(account, snapshot)])
@@ -62,17 +62,59 @@ import Testing
     #expect(monthly.headlineWindow(for: account)?.usedPercent == 82)
 }
 
-/// A scoped weekly limit without a model name is labelled plain "Week"; it must not stand in for
-/// the overall weekly allowance, nor for a missing session.
-@Test func scopedWeekNeverStandsInForAnotherAllowance() throws {
-    let payload = #"{"limits":[{"kind":"weekly_scoped","percent":90},{"kind":"weekly_all","percent":1}]}"#
+private let weeklyAll = #"{"kind":"weekly_all","percent":1,"resets_at":"2026-11-30T09:00:00Z"}"#
+private let scopedNamed = #"{"kind":"weekly_scoped","percent":90,"scope":{"model":{"display_name":"Fable"}}}"#
+/// No model display name, so the label is plain "Week", identical to the overall allowance.
+private let scopedUnnamed = #"{"kind":"weekly_scoped","percent":90}"#
+private let scopedEmptyScope = #"{"kind":"weekly_scoped","percent":90,"scope":{}}"#
+
+/// Week selects `weekly_all` explicitly, whatever the order of limits and whether scoped limits
+/// have a model name. Session never falls back to a scoped weekly limit.
+@Test(arguments: [
+    [scopedUnnamed, weeklyAll],
+    [weeklyAll, scopedUnnamed],
+    [scopedEmptyScope, weeklyAll],
+    [weeklyAll, scopedEmptyScope],
+    [scopedNamed, scopedUnnamed, weeklyAll],
+    [weeklyAll, scopedUnnamed, scopedNamed],
+])
+@MainActor func weekSelectsWeeklyAllRegardlessOfOrderAndModelName(limits: [String]) throws {
+    let payload = #"{"limits":["# + limits.joined(separator: ",") + "]}"
     let windows = try JSONDecoder().decode(ClaudeUsage.self, from: Data(payload.utf8)).windows()
-    #expect(windows.map(\.label) == ["Week", "Week"])
+    #expect(windows.filter { $0.label == "Week" }.count >= 2, "The fixture must reproduce the ambiguous label")
+
     let snapshot = UsageSnapshot(windows: windows, fetchedAt: Date())
     let week = AccountConfig(name: "Claude", provider: .claude, dir: "~/.claude", usageType: .week)
-    #expect(snapshot.headlineWindow(for: week)?.usedPercent == 1)
+    let selected = try #require(snapshot.headlineWindow(for: week))
+    #expect(selected.kind == .weeklyAll)
+    #expect(selected.usedPercent == 1)
+    #expect(selected.resetsAt == Dates.parseISO("2026-11-30T09:00:00Z"))
+
+    let store = UsageStore(fixed: [(week, snapshot)])
+    guard case .account(_, let value) = store.menuBarSegments.first else {
+        Issue.record("Expected an account segment"); return
+    }
+    #expect(value == "1%")
+
     let session = AccountConfig(name: "Claude", provider: .claude, dir: "~/.claude")
     #expect(snapshot.headlineWindow(for: session) == nil)
+}
+
+/// Only scoped weekly limits, all without model names: Week shows a dash, not a scoped limit.
+@Test(arguments: [[scopedUnnamed], [scopedUnnamed, scopedEmptyScope]])
+func weekWithoutWeeklyAllShowsNothing(limits: [String]) throws {
+    let payload = #"{"limits":["# + limits.joined(separator: ",") + "]}"
+    let windows = try JSONDecoder().decode(ClaudeUsage.self, from: Data(payload.utf8)).windows()
+    let week = AccountConfig(name: "Claude", provider: .claude, dir: "~/.claude", usageType: .week)
+    #expect(UsageSnapshot(windows: windows, fetchedAt: Date()).headlineWindow(for: week) == nil)
+}
+
+/// The semantic type survives the snapshot cache's JSON round trip under the API's own names.
+@Test func limitKindRoundTripsWithApiNames() throws {
+    let window = UsageWindow(label: "Week", usedPercent: 1, kind: .weeklyAll)
+    let json = try #require(String(data: JSONEncoder().encode(window), encoding: .utf8))
+    #expect(json.contains(#""kind":"weekly_all""#))
+    #expect(try JSONDecoder().decode(UsageWindow.self, from: Data(json.utf8)).kind == .weeklyAll)
 }
 
 @Test(arguments: [("week", ClaudeUsageType.week), ("Week", .week), ("weekly", .session), ("SESSION", .session)])
